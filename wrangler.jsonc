@@ -11,10 +11,7 @@
     "run_worker_first": [
       "/api/*",
       "/media/*",
-      "/e/*",
-      "/preview/*",
-      "/c/*",
-      "/r/*"
+      "/e/*"
     ]
   },
   "d1_databases": [
