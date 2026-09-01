@@ -19,7 +19,7 @@ export default {
       if (url.pathname.startsWith("/media/")) return await handleMedia(request, env, url);
 
       let m = url.pathname.match(/^\/e\/([^/]+)\/?$/);
-      if (m) return await serveSpa(request, env, decodeURIComponent(m[1]), false);
+      if (m) return await servePublicEntry(request, env, decodeURIComponent(m[1]));
 
       m = url.pathname.match(/^\/preview\/([^/]+)\/([^/]+)\/?$/);
       if (m) return await serveSpa(request, env, decodeURIComponent(m[1]), true);
@@ -516,6 +516,35 @@ async function clientSetReservation(env,event,id,status) {
     await env.DB.prepare(`UPDATE reservations SET status='cancelled',cancelled_at=CURRENT_TIMESTAMP WHERE id=?`).bind(id).run();
   }
   return json({ok:true,status});
+}
+
+async function servePublicEntry(request,env,slug) {
+  const event=await env.DB.prepare(`SELECT event_name,public_title,intro,share_description,preview_path,slug FROM events WHERE slug=? LIMIT 1`).bind(slug).first();
+  const title=event?`${event.event_name} | Libri Presentes`:"Libri Presentes";
+  const desc=event?(event.share_description||event.intro||event.public_title||"Uma forma bonita, pr\u00e1tica e leve de presentear."):"Uma forma bonita, pr\u00e1tica e leve de presentear.";
+  const image=event&&event.preview_path?mediaUrl(env,event.preview_path):"";
+  const canonical=event?`${env.APP_URL}/e/${encodeURIComponent(event.slug)}`:`${env.APP_URL}/e/${encodeURIComponent(slug)}`;
+  const target=`/p/${encodeURIComponent(slug)}`;
+  const html=`<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${htmlAttr(title)}</title>
+<meta property="og:title" content="${htmlAttr(title)}">
+<meta property="og:description" content="${htmlAttr(desc)}">
+<meta property="og:type" content="website">
+<meta property="og:url" content="${htmlAttr(canonical)}">
+${image?`<meta property="og:image" content="${htmlAttr(image)}">`:""}
+<meta name="twitter:card" content="${image?"summary_large_image":"summary"}">
+<link rel="canonical" href="${htmlAttr(canonical)}">
+<meta http-equiv="refresh" content="0;url=${htmlAttr(target)}">
+</head>
+<body>
+<p>Abrindo Libri Presentes... <a href="${htmlAttr(target)}">continuar</a></p>
+</body>
+</html>`;
+  return new Response(request.method==="HEAD"?null:html,{status:200,headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-cache","x-content-type-options":"nosniff","referrer-policy":"strict-origin-when-cross-origin","x-frame-options":"SAMEORIGIN"}});
 }
 
 async function serveSpa(request,env,slug,isPreview=false) {
