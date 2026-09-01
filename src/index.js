@@ -9,34 +9,25 @@ const EVENT_TYPES = new Set(["wedding","bridal_shower","housewarming","engagemen
 const GIFT_TYPES = new Set(["quota","creative","experience","physical"]);
 const COMPLETE_BEHAVIORS = new Set(["show","hide","allow_extra"]);
 const EXPERIENCE_STYLES = new Set(["home","journey","classic"]);
+const PIX_TYPES = new Set(["cpf","cnpj","email","phone","random"]);
 
 export default {
   async fetch(request, env) {
     try {
       const url = new URL(request.url);
+      if (url.pathname.startsWith("/api/")) return await handleApi(request, env, url);
+      if (url.pathname.startsWith("/media/")) return await handleMedia(request, env, url);
 
-      if (url.pathname.startsWith("/api/")) {
-        return await handleApi(request, env, url);
-      }
+      let m = url.pathname.match(/^\/e\/([^/]+)\/?$/);
+      if (m) return await serveSpa(request, env, decodeURIComponent(m[1]), false);
 
-      if (url.pathname.startsWith("/media/")) {
-        return await handleMedia(request, env, url);
-      }
+      m = url.pathname.match(/^\/preview\/([^/]+)\/([^/]+)\/?$/);
+      if (m) return await serveSpa(request, env, decodeURIComponent(m[1]), true);
 
-      const eventMatch = url.pathname.match(/^\/e\/([^/]+)\/?$/);
-      if (eventMatch) {
-        const slug = decodeURIComponent(eventMatch[1]);
-        return await serveSpa(request, env, slug);
-      }
-
-      return await serveSpa(request, env, null);
+      return await serveSpa(request, env, null, false);
     } catch (error) {
       console.error("Unhandled:", error);
-      return json({
-        ok:false,
-        error:"internal_error",
-        message:"Não foi possível concluir esta solicitação."
-      }, 500);
+      return json({ok:false,error:"internal_error",message:"NÃ£o foi possÃ­vel concluir esta solicitaÃ§Ã£o."},500);
     }
   }
 };
@@ -46,235 +37,148 @@ async function handleApi(request, env, url) {
   const method = request.method.toUpperCase();
 
   if (p === "/api/health" && method === "GET") {
-    return json({ok:true, app:env.APP_NAME || "Libri Presentes", now:new Date().toISOString()});
+    return json({ok:true,app:env.APP_NAME||"Libri Presentes",now:new Date().toISOString()});
   }
 
-  // PUBLIC
   let m = p.match(/^\/api\/events\/([^/]+)$/);
-  if (m && method === "GET") {
-    return getPublicEvent(env, decodeURIComponent(m[1]));
-  }
+  if (m && method === "GET") return getPublicEvent(env,decodeURIComponent(m[1]),null);
+
+  m = p.match(/^\/api\/previews\/([^/]+)\/([^/]+)$/);
+  if (m && method === "GET") return getPublicEvent(env,decodeURIComponent(m[1]),decodeURIComponent(m[2]));
 
   m = p.match(/^\/api\/events\/([^/]+)\/contributions$/);
-  if (m && method === "POST") {
-    return createContribution(request, env, decodeURIComponent(m[1]));
-  }
+  if (m && method === "POST") return createContribution(request,env,decodeURIComponent(m[1]));
 
   m = p.match(/^\/api\/events\/([^/]+)\/reservations$/);
-  if (m && method === "POST") {
-    return createReservation(request, env, decodeURIComponent(m[1]));
-  }
+  if (m && method === "POST") return createReservation(request,env,decodeURIComponent(m[1]));
 
   m = p.match(/^\/api\/reservations\/([^/]+)$/);
-  if (m && method === "GET") {
-    return getReservation(env, decodeURIComponent(m[1]));
-  }
+  if (m && method === "GET") return getReservation(env,decodeURIComponent(m[1]));
 
   m = p.match(/^\/api\/reservations\/([^/]+)\/purchased$/);
-  if (m && method === "POST") {
-    return markReservationPurchased(env, decodeURIComponent(m[1]));
-  }
+  if (m && method === "POST") return markReservationPurchased(env,decodeURIComponent(m[1]));
 
   m = p.match(/^\/api\/reservations\/([^/]+)\/cancel$/);
-  if (m && method === "POST") {
-    return cancelReservation(env, decodeURIComponent(m[1]));
-  }
+  if (m && method === "POST") return cancelReservation(env,decodeURIComponent(m[1]));
 
-  // ADMIN
   if (p === "/api/admin/events" && method === "GET") {
-    const denied = requireAdmin(request, env); if (denied) return denied;
+    const denied=requireAdmin(request,env); if(denied) return denied;
     return adminListEvents(env);
   }
-
   if (p === "/api/admin/events" && method === "POST") {
-    const denied = requireAdmin(request, env); if (denied) return denied;
-    return adminCreateEvent(request, env);
+    const denied=requireAdmin(request,env); if(denied) return denied;
+    return adminCreateEvent(request,env);
   }
 
-  m = p.match(/^\/api\/admin\/events\/([^/]+)$/);
-  if (m && method === "GET") {
-    const denied = requireAdmin(request, env); if (denied) return denied;
-    return adminGetEvent(env, m[1]);
+  m=p.match(/^\/api\/admin\/events\/([^/]+)$/);
+  if(m&&method==="GET"){const denied=requireAdmin(request,env);if(denied)return denied;return adminGetEvent(env,m[1]);}
+  if(m&&method==="PATCH"){const denied=requireAdmin(request,env);if(denied)return denied;return adminUpdateEvent(request,env,m[1]);}
+
+  m=p.match(/^\/api\/admin\/events\/([^/]+)\/access$/);
+  if(m&&method==="POST"){const denied=requireAdmin(request,env);if(denied)return denied;return adminRegenerateAccess(env,m[1]);}
+
+  m=p.match(/^\/api\/admin\/events\/([^/]+)\/preview$/);
+  if(m&&method==="PUT"){const denied=requireAdmin(request,env);if(denied)return denied;return adminUploadPreview(request,env,m[1]);}
+
+  if(p==="/api/client/dashboard"&&method==="GET"){
+    const client=await requireClient(request,env);if(client.response)return client.response;return clientDashboard(env,client.event);
+  }
+  if(p==="/api/client/event"&&method==="PATCH"){
+    const client=await requireClient(request,env);if(client.response)return client.response;return clientUpdateEvent(request,env,client.event);
+  }
+  if(p==="/api/client/event"&&method==="DELETE"){
+    const client=await requireClient(request,env);if(client.response)return client.response;return clientDeleteEvent(request,env,client.event);
+  }
+  if(p==="/api/client/publish"&&method==="POST"){
+    const client=await requireClient(request,env);if(client.response)return client.response;return clientPublish(env,client.event);
+  }
+  if(p==="/api/client/deactivate"&&method==="POST"){
+    const client=await requireClient(request,env);if(client.response)return client.response;return clientDeactivate(env,client.event);
+  }
+  if(p==="/api/client/gifts/bulk"&&method==="POST"){
+    const client=await requireClient(request,env);if(client.response)return client.response;return clientBulkGifts(request,env,client.event);
+  }
+  if(p==="/api/client/gifts"&&method==="POST"){
+    const client=await requireClient(request,env);if(client.response)return client.response;return clientCreateGift(request,env,client.event);
   }
 
-  if (m && method === "PATCH") {
-    const denied = requireAdmin(request, env); if (denied) return denied;
-    return adminUpdateEvent(request, env, m[1]);
-  }
+  m=p.match(/^\/api\/client\/gifts\/([^/]+)$/);
+  if(m&&method==="PATCH"){const client=await requireClient(request,env);if(client.response)return client.response;return clientUpdateGift(request,env,client.event,m[1]);}
+  if(m&&method==="DELETE"){const client=await requireClient(request,env);if(client.response)return client.response;return clientDeleteGift(env,client.event,m[1]);}
 
-  m = p.match(/^\/api\/admin\/events\/([^/]+)\/access$/);
-  if (m && method === "POST") {
-    const denied = requireAdmin(request, env); if (denied) return denied;
-    return adminRegenerateAccess(env, m[1]);
-  }
+  m=p.match(/^\/api\/client\/gifts\/([^/]+)\/image$/);
+  if(m&&method==="PUT"){const client=await requireClient(request,env);if(client.response)return client.response;return clientUploadGiftImage(request,env,client.event,m[1]);}
+  if(m&&method==="DELETE"){const client=await requireClient(request,env);if(client.response)return client.response;return clientDeleteGiftImage(env,client.event,m[1]);}
 
-  m = p.match(/^\/api\/admin\/events\/([^/]+)\/preview$/);
-  if (m && method === "PUT") {
-    const denied = requireAdmin(request, env); if (denied) return denied;
-    return adminUploadPreview(request, env, m[1]);
-  }
+  m=p.match(/^\/api\/client\/contributions\/([^/]+)\/confirm$/);
+  if(m&&method==="POST"){const client=await requireClient(request,env);if(client.response)return client.response;return clientSetContribution(env,client.event,m[1],"confirmed");}
+  m=p.match(/^\/api\/client\/contributions\/([^/]+)\/reject$/);
+  if(m&&method==="POST"){const client=await requireClient(request,env);if(client.response)return client.response;return clientSetContribution(env,client.event,m[1],"rejected");}
 
-  // CLIENT
-  if (p === "/api/client/dashboard" && method === "GET") {
-    const client = await requireClient(request, env);
-    if (client.response) return client.response;
-    return clientDashboard(env, client.event);
-  }
+  m=p.match(/^\/api\/client\/reservations\/([^/]+)\/received$/);
+  if(m&&method==="POST"){const client=await requireClient(request,env);if(client.response)return client.response;return clientSetReservation(env,client.event,m[1],"received");}
+  m=p.match(/^\/api\/client\/reservations\/([^/]+)\/cancel$/);
+  if(m&&method==="POST"){const client=await requireClient(request,env);if(client.response)return client.response;return clientSetReservation(env,client.event,m[1],"cancelled");}
 
-  if (p === "/api/client/event" && method === "PATCH") {
-    const client = await requireClient(request, env);
-    if (client.response) return client.response;
-    return clientUpdateEvent(request, env, client.event);
-  }
-
-  if (p === "/api/client/event" && method === "DELETE") {
-    const client = await requireClient(request, env);
-    if (client.response) return client.response;
-    return clientDeleteEvent(request, env, client.event);
-  }
-
-  if (p === "/api/client/gifts" && method === "POST") {
-    const client = await requireClient(request, env);
-    if (client.response) return client.response;
-    return clientCreateGift(request, env, client.event);
-  }
-
-  m = p.match(/^\/api\/client\/gifts\/([^/]+)$/);
-  if (m && method === "PATCH") {
-    const client = await requireClient(request, env);
-    if (client.response) return client.response;
-    return clientUpdateGift(request, env, client.event, m[1]);
-  }
-
-  if (m && method === "DELETE") {
-    const client = await requireClient(request, env);
-    if (client.response) return client.response;
-    return clientDeleteGift(env, client.event, m[1]);
-  }
-
-  m = p.match(/^\/api\/client\/gifts\/([^/]+)\/image$/);
-  if (m && method === "PUT") {
-    const client = await requireClient(request, env);
-    if (client.response) return client.response;
-    return clientUploadGiftImage(request, env, client.event, m[1]);
-  }
-
-  if (m && method === "DELETE") {
-    const client = await requireClient(request, env);
-    if (client.response) return client.response;
-    return clientDeleteGiftImage(env, client.event, m[1]);
-  }
-
-  m = p.match(/^\/api\/client\/contributions\/([^/]+)\/confirm$/);
-  if (m && method === "POST") {
-    const client = await requireClient(request, env);
-    if (client.response) return client.response;
-    return clientSetContribution(env, client.event, m[1], "confirmed");
-  }
-
-  m = p.match(/^\/api\/client\/contributions\/([^/]+)\/reject$/);
-  if (m && method === "POST") {
-    const client = await requireClient(request, env);
-    if (client.response) return client.response;
-    return clientSetContribution(env, client.event, m[1], "rejected");
-  }
-
-  m = p.match(/^\/api\/client\/reservations\/([^/]+)\/received$/);
-  if (m && method === "POST") {
-    const client = await requireClient(request, env);
-    if (client.response) return client.response;
-    return clientSetReservation(env, client.event, m[1], "received");
-  }
-
-  m = p.match(/^\/api\/client\/reservations\/([^/]+)\/cancel$/);
-  if (m && method === "POST") {
-    const client = await requireClient(request, env);
-    if (client.response) return client.response;
-    return clientSetReservation(env, client.event, m[1], "cancelled");
-  }
-
-  return json({ok:false,error:"not_found",message:"Rota não encontrada."},404);
+  return json({ok:false,error:"not_found",message:"Rota nÃ£o encontrada."},404);
 }
 
-async function getPublicEvent(env, slug) {
+async function getPublicEvent(env, slug, previewToken=null) {
   await cleanupExpiredReservations(env);
-  const event = await env.DB.prepare(`
+  const event=await env.DB.prepare(`
     SELECT id,slug,event_name,event_type,event_date,status,public_title,intro,
-           pix_key,pix_key_type,pix_holder_name,pix_city,
-           experience_style,primary_color,secondary_color,accent_color,
-           background_color,text_color,cover_path,preview_path,
-           completed_behavior,reservation_hours,share_description
+      pix_key,pix_key_type,pix_holder_name,pix_city,experience_style,
+      primary_color,secondary_color,accent_color,background_color,text_color,
+      cover_path,preview_path,completed_behavior,reservation_hours,share_description,
+      preview_token,onboarding_completed,published_at
     FROM events WHERE slug=? LIMIT 1
   `).bind(slug).first();
+  if(!event)return json({ok:false,error:"event_not_found",message:"Evento nÃ£o encontrado."},404);
 
-  if (!event) return json({ok:false,error:"event_not_found",message:"Evento não encontrado."},404);
-  if (event.status !== "active") return json({ok:false,error:"event_inactive",message:"Esta lista não está recebendo presentes no momento."},410);
+  const isPreview=Boolean(previewToken);
+  if(isPreview && (!event.preview_token || previewToken!==event.preview_token)){
+    return json({ok:false,error:"preview_forbidden",message:"Esta prÃ©via nÃ£o estÃ¡ mais disponÃ­vel."},403);
+  }
+  if(!isPreview && event.status!=="active"){
+    const ready=await eventReadiness(env,event);
+    return json({ok:false,error:"event_unavailable",display_status:displayState(event,ready),message:event.status==="inactive"?"Esta lista foi desativada.":"Esta lista ainda estÃ¡ sendo preparada."},409);
+  }
 
-  const rows = await env.DB.prepare(`
-    SELECT
-      g.id,g.title,g.description,g.category,g.gift_type,g.target_cents,g.quantity,
+  const rows=await env.DB.prepare(`
+    SELECT g.id,g.title,g.description,g.category,g.gift_type,g.target_cents,g.quantity,
       g.icon_name,g.preferred_color,g.image_path,g.allow_pix,g.allow_physical,g.display_order,
       COALESCE((SELECT SUM(c.amount_cents) FROM contributions c WHERE c.gift_id=g.id AND c.status='confirmed'),0) confirmed_cents,
       COALESCE((SELECT COUNT(*) FROM contributions c WHERE c.gift_id=g.id AND c.status='confirmed'),0) contributor_count,
       COALESCE((SELECT COUNT(*) FROM reservations r WHERE r.gift_id=g.id AND r.status IN ('reserved','purchased')),0) active_reservations,
       COALESCE((SELECT COUNT(*) FROM reservations r WHERE r.gift_id=g.id AND r.status='received'),0) received_reservations
     FROM gifts g
-    WHERE g.event_id=? AND g.is_active=1
+    WHERE g.event_id=? AND g.is_active=1 AND g.target_cents>=100
     ORDER BY g.display_order ASC,g.created_at ASC
   `).bind(event.id).all();
 
-  let gifts = (rows.results || []).map(g => ({
-    ...g,
-    image_url: g.image_path ? mediaUrl(env,g.image_path) : null
-  }));
-
-  if (event.completed_behavior === "hide") {
-    gifts = gifts.filter(g => Number(g.target_cents) <= 0 || Number(g.confirmed_cents) < Number(g.target_cents) || g.gift_type === "physical");
+  let gifts=(rows.results||[]).map(g=>({...g,image_url:g.image_path?mediaUrl(env,g.image_path):null}));
+  if(event.completed_behavior==="hide"){
+    gifts=gifts.filter(g=>g.gift_type==="physical"
+      ? (Number(g.received_reservations||0)<Number(g.quantity||1) && Number(g.confirmed_cents||0)<Number(g.target_cents||0))
+      : Number(g.confirmed_cents||0)<Number(g.target_cents||0));
   }
 
-  return json({
-    ok:true,
-    event:{
-      ...event,
-      cover_url:event.cover_path ? mediaUrl(env,event.cover_path) : null,
-      preview_url:event.preview_path ? mediaUrl(env,event.preview_path) : null
-    },
-    gifts
-  });
+  return json({ok:true,is_preview:isPreview,event:{...event,preview_token:undefined,cover_url:event.cover_path?mediaUrl(env,event.cover_path):null,preview_url:event.preview_path?mediaUrl(env,event.preview_path):null},gifts});
 }
 
 async function createContribution(request, env, slug) {
-  const event = await activeEventBySlug(env,slug);
-  if (!event) return json({ok:false,error:"event_not_found"},404);
-
-  const body = await readJson(request);
-  if (!body) return bad("Dados inválidos.");
-
-  const gift = await env.DB.prepare(`SELECT * FROM gifts WHERE id=? AND event_id=? AND is_active=1 LIMIT 1`)
-    .bind(clean(body.gift_id,80),event.id).first();
-
-  if (!gift || !gift.allow_pix) return bad("Este desejo não aceita contribuição via Pix.");
-
-  const guestName = clean(body.guest_name,100);
-  const guestContact = clean(body.guest_contact,160);
-  const guestMessage = clean(body.guest_message,500);
-  const amount = int(body.amount_cents);
-
-  if (!guestName || !guestContact || amount < 100) return bad("Informe seu nome, contato e um valor válido.");
-
-  const confirmed = await confirmedForGift(env,gift.id);
-  const completed = gift.target_cents > 0 && confirmed >= gift.target_cents;
-  if (completed && event.completed_behavior !== "allow_extra") {
-    return bad("Este desejo já foi realizado.");
-  }
-
-  const id = crypto.randomUUID();
-  await env.DB.prepare(`
-    INSERT INTO contributions
-      (id,event_id,gift_id,guest_name,guest_contact,amount_cents,status,payment_method,guest_message)
-    VALUES (?,?,?,?,?,?,'pending','pix',?)
-  `).bind(id,event.id,gift.id,guestName,guestContact,amount,guestMessage || null).run();
-
+  const event=await activeEventBySlug(env,slug);
+  if(!event)return json({ok:false,error:"event_not_found",message:"Esta lista nÃ£o estÃ¡ disponÃ­vel."},404);
+  const body=await readJson(request);if(!body)return bad("Dados invÃ¡lidos.");
+  const gift=await env.DB.prepare(`SELECT * FROM gifts WHERE id=? AND event_id=? AND is_active=1 AND target_cents>=100 LIMIT 1`).bind(clean(body.gift_id,80),event.id).first();
+  if(!gift||!gift.allow_pix)return bad("Este desejo nÃ£o aceita contribuiÃ§Ã£o via Pix.");
+  const guestName=clean(body.guest_name,100),guestContact=clean(body.guest_contact,160),guestMessage=clean(body.guest_message,500),amount=int(body.amount_cents);
+  if(!guestName||!guestContact||amount<100)return bad("Informe seu nome, contato e um valor vÃ¡lido.");
+  const confirmed=await confirmedForGift(env,gift.id),remaining=Math.max(0,Number(gift.target_cents)-confirmed);
+  if(remaining<=0&&event.completed_behavior!=="allow_extra")return bad("Este desejo jÃ¡ foi realizado.");
+  if(event.completed_behavior!=="allow_extra"&&amount>remaining)return json({ok:false,error:"amount_too_high",message:"O valor ultrapassa o que falta para completar este desejo.",max_cents:remaining},400);
+  const id=crypto.randomUUID();
+  await env.DB.prepare(`INSERT INTO contributions(id,event_id,gift_id,guest_name,guest_contact,amount_cents,status,payment_method,guest_message) VALUES(?,?,?,?,?,?,'pending','pix',?)`).bind(id,event.id,gift.id,guestName,guestContact,amount,guestMessage||null).run();
   await log(env,event.id,"guest","contribution_declared",{gift_id:gift.id,contribution_id:id,detail:`${guestName} informou Pix de ${amount}`});
   return json({ok:true,contribution_id:id,status:"pending"},201);
 }
@@ -285,12 +189,12 @@ async function createReservation(request, env, slug) {
   if (!event) return json({ok:false,error:"event_not_found"},404);
 
   const body = await readJson(request);
-  if (!body) return bad("Dados inválidos.");
+  if (!body) return bad("Dados invÃ¡lidos.");
 
   const gift = await env.DB.prepare(`SELECT * FROM gifts WHERE id=? AND event_id=? AND is_active=1 LIMIT 1`)
     .bind(clean(body.gift_id,80),event.id).first();
 
-  if (!gift || gift.gift_type !== "physical" || !gift.allow_physical) return bad("Este presente não aceita reserva.");
+  if (!gift || gift.gift_type !== "physical" || !gift.allow_physical) return bad("Este presente nÃ£o aceita reserva.");
 
   const guestName = clean(body.guest_name,100);
   const guestContact = clean(body.guest_contact,160);
@@ -301,7 +205,7 @@ async function createReservation(request, env, slug) {
     WHERE gift_id=? AND status IN ('reserved','purchased','received')
   `).bind(gift.id).first();
 
-  if (Number(countRow?.n || 0) >= Number(gift.quantity || 1)) return bad("Este presente já está reservado.");
+  if (Number(countRow?.n || 0) >= Number(gift.quantity || 1)) return bad("Este presente jÃ¡ estÃ¡ reservado.");
 
   const rawToken = randomToken();
   const tokenHash = await sha256(rawToken);
@@ -345,7 +249,7 @@ async function markReservationPurchased(env, rawToken) {
   const hash = await sha256(rawToken);
   const row = await env.DB.prepare(`SELECT * FROM reservations WHERE manage_token_hash=? LIMIT 1`).bind(hash).first();
   if (!row) return json({ok:false,error:"reservation_not_found"},404);
-  if (!["reserved","purchased"].includes(row.status)) return bad("Esta reserva não pode ser alterada.");
+  if (!["reserved","purchased"].includes(row.status)) return bad("Esta reserva nÃ£o pode ser alterada.");
   await env.DB.prepare(`UPDATE reservations SET status='purchased',purchased_at=CURRENT_TIMESTAMP WHERE id=?`).bind(row.id).run();
   await log(env,row.event_id,"guest","gift_purchased",{gift_id:row.gift_id,reservation_id:row.id});
   return json({ok:true,status:"purchased"});
@@ -355,7 +259,7 @@ async function cancelReservation(env, rawToken) {
   const hash = await sha256(rawToken);
   const row = await env.DB.prepare(`SELECT * FROM reservations WHERE manage_token_hash=? LIMIT 1`).bind(hash).first();
   if (!row) return json({ok:false,error:"reservation_not_found"},404);
-  if (!["reserved","purchased"].includes(row.status)) return bad("Esta reserva não pode ser cancelada.");
+  if (!["reserved","purchased"].includes(row.status)) return bad("Esta reserva nÃ£o pode ser cancelada.");
   await env.DB.prepare(`UPDATE reservations SET status='cancelled',cancelled_at=CURRENT_TIMESTAMP WHERE id=?`).bind(row.id).run();
   await log(env,row.event_id,"guest","reservation_cancelled",{gift_id:row.gift_id,reservation_id:row.id});
   return json({ok:true,status:"cancelled"});
@@ -364,7 +268,7 @@ async function cancelReservation(env, rawToken) {
 function requireAdmin(request, env) {
   const supplied = request.headers.get("x-admin-key") || "";
   if (!env.ADMIN_KEY || supplied !== env.ADMIN_KEY) {
-    return json({ok:false,error:"unauthorized",message:"Acesso não autorizado."},401);
+    return json({ok:false,error:"unauthorized",message:"Acesso nÃ£o autorizado."},401);
   }
   return null;
 }
@@ -379,97 +283,70 @@ async function requireClient(request, env) {
 }
 
 async function adminListEvents(env) {
-  const rows = await env.DB.prepare(`
-    SELECT e.id,e.slug,e.event_name,e.event_type,e.event_date,e.status,e.preview_path,e.created_at,
+  const rows=await env.DB.prepare(`
+    SELECT e.*,
       (SELECT COUNT(*) FROM gifts g WHERE g.event_id=e.id) gift_count,
+      (SELECT COUNT(*) FROM gifts g WHERE g.event_id=e.id AND g.is_active=1 AND g.target_cents>=100) valid_gift_count,
       COALESCE((SELECT SUM(amount_cents) FROM contributions c WHERE c.event_id=e.id AND c.status='confirmed'),0) confirmed_cents,
       COALESCE((SELECT COUNT(*) FROM contributions c WHERE c.event_id=e.id AND c.status='pending'),0) pending_count
     FROM events e ORDER BY e.created_at DESC
   `).all();
-  return json({ok:true,events:(rows.results||[]).map(e=>({...e,preview_url:e.preview_path?mediaUrl(env,e.preview_path):null}))});
+  const events=(rows.results||[]).map(e=>{
+    const readiness=readinessFromCount(e,Number(e.valid_gift_count||0));
+    return {...e,client_token_hash:undefined,preview_token:undefined,preview_url:e.preview_path?mediaUrl(env,e.preview_path):null,display_status:displayState(e,readiness),readiness};
+  });
+  return json({ok:true,events});
 }
 
 async function adminCreateEvent(request, env) {
-  const body = await readJson(request);
-  if (!body) return bad("Dados inválidos.");
-
-  const eventName = clean(body.event_name,120);
-  const slug = slugify(body.slug || eventName);
-  const eventType = EVENT_TYPES.has(body.event_type) ? body.event_type : "wedding";
-  const style = EXPERIENCE_STYLES.has(body.experience_style) ? body.experience_style : "home";
-
-  if (!eventName || !slug) return bad("Nome e slug são obrigatórios.");
-
-  const exists = await env.DB.prepare(`SELECT id FROM events WHERE slug=? LIMIT 1`).bind(slug).first();
-  if (exists) return json({ok:false,error:"slug_exists",message:"Este slug já está em uso."},409);
-
-  const rawToken = randomToken();
-  const tokenHash = await sha256(rawToken);
-  const id = crypto.randomUUID();
-
+  const body=await readJson(request);if(!body)return bad("Dados invÃ¡lidos.");
+  const eventName=clean(body.event_name,120),slug=slugify(body.slug||eventName),eventType=EVENT_TYPES.has(body.event_type)?body.event_type:"wedding",style=EXPERIENCE_STYLES.has(body.experience_style)?body.experience_style:"home";
+  if(!eventName||!slug)return bad("Nome e slug sÃ£o obrigatÃ³rios.");
+  const exists=await env.DB.prepare(`SELECT id FROM events WHERE slug=? LIMIT 1`).bind(slug).first();
+  if(exists)return json({ok:false,error:"slug_exists",message:"Este slug jÃ¡ estÃ¡ em uso."},409);
+  const clientToken=randomToken(),tokenHash=await sha256(clientToken),previewToken=randomToken(),id=crypto.randomUUID();
   await env.DB.prepare(`
-    INSERT INTO events
-      (id,slug,event_name,client_name,event_type,event_date,status,public_title,intro,
-       experience_style,primary_color,secondary_color,accent_color,background_color,text_color,
-       client_token_hash,client_access_created_at,completed_behavior,reservation_hours)
-    VALUES (?,?,?,?,?,?, 'draft',?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,'show',48)
+    INSERT INTO events(id,slug,event_name,client_name,event_type,event_date,status,public_title,intro,
+      experience_style,primary_color,secondary_color,accent_color,background_color,text_color,
+      client_token_hash,client_access_created_at,completed_behavior,reservation_hours,preview_token,onboarding_completed)
+    VALUES(?,?,?,?,?,?,'draft',?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,'show',48,?,0)
   `).bind(
     id,slug,eventName,clean(body.client_name,120)||null,eventType,clean(body.event_date,20)||null,
     clean(body.public_title,160)||"Nossa lista de desejos",
     clean(body.intro,800)||"Reunimos alguns desejos para essa nova fase. Escolha um deles e participe do seu jeito.",
-    style,
-    color(body.primary_color,"#6F6258"),
-    color(body.secondary_color,"#D8CEC4"),
-    color(body.accent_color,"#A8AD96"),
-    color(body.background_color,"#F7F3EE"),
-    color(body.text_color,"#2A2724"),
-    tokenHash
+    style,color(body.primary_color,"#6F6258"),color(body.secondary_color,"#D8CEC4"),color(body.accent_color,"#A8AD96"),color(body.background_color,"#F7F3EE"),color(body.text_color,"#2A2724"),tokenHash,previewToken
   ).run();
-
   await log(env,id,"admin","event_created",{detail:eventName});
-  return json({
-    ok:true,
-    event_id:id,
-    slug,
-    client_url:`${env.APP_URL}/c/${encodeURIComponent(rawToken)}`,
-    public_url:`${env.APP_URL}/e/${encodeURIComponent(slug)}`
-  },201);
+  return json({ok:true,event_id:id,slug,display_status:"configuring",client_url:`${env.APP_URL}/c/${encodeURIComponent(clientToken)}`,preview_url:`${env.APP_URL}/preview/${encodeURIComponent(slug)}/${encodeURIComponent(previewToken)}`,public_url:`${env.APP_URL}/e/${encodeURIComponent(slug)}`},201);
 }
 
 async function adminGetEvent(env,id) {
-  const event = await env.DB.prepare(`SELECT * FROM events WHERE id=? LIMIT 1`).bind(id).first();
-  if (!event) return json({ok:false,error:"not_found"},404);
-  return json({ok:true,event:{...event,preview_url:event.preview_path?mediaUrl(env,event.preview_path):null}});
+  let event=await env.DB.prepare(`SELECT * FROM events WHERE id=? LIMIT 1`).bind(id).first();
+  if(!event)return json({ok:false,error:"not_found"},404);
+  event=await ensurePreviewToken(env,event);
+  const readiness=await eventReadiness(env,event);
+  return json({ok:true,event:{...event,client_token_hash:undefined,preview_url:event.preview_path?mediaUrl(env,event.preview_path):null,public_url:`${env.APP_URL}/e/${event.slug}`,private_preview_url:`${env.APP_URL}/preview/${event.slug}/${event.preview_token}`,display_status:displayState(event,readiness),readiness}});
 }
 
 async function adminUpdateEvent(request, env, id) {
-  const event = await env.DB.prepare(`SELECT * FROM events WHERE id=? LIMIT 1`).bind(id).first();
-  if (!event) return json({ok:false,error:"not_found"},404);
-  const body = await readJson(request); if (!body) return bad("Dados inválidos.");
-
-  const updates = {
-    event_name: body.event_name !== undefined ? clean(body.event_name,120) : event.event_name,
-    client_name: body.client_name !== undefined ? clean(body.client_name,120) : event.client_name,
-    event_date: body.event_date !== undefined ? clean(body.event_date,20) : event.event_date,
-    public_title: body.public_title !== undefined ? clean(body.public_title,160) : event.public_title,
-    intro: body.intro !== undefined ? clean(body.intro,800) : event.intro,
-    experience_style: EXPERIENCE_STYLES.has(body.experience_style) ? body.experience_style : event.experience_style,
-    primary_color: body.primary_color ? color(body.primary_color,event.primary_color) : event.primary_color,
-    secondary_color: body.secondary_color ? color(body.secondary_color,event.secondary_color) : event.secondary_color,
-    accent_color: body.accent_color ? color(body.accent_color,event.accent_color) : event.accent_color,
-    background_color: body.background_color ? color(body.background_color,event.background_color) : event.background_color,
-    text_color: body.text_color ? color(body.text_color,event.text_color) : event.text_color
-  };
-
-  await env.DB.prepare(`
-    UPDATE events SET event_name=?,client_name=?,event_date=?,public_title=?,intro=?,experience_style=?,
-      primary_color=?,secondary_color=?,accent_color=?,background_color=?,text_color=?
-    WHERE id=?
-  `).bind(
-    updates.event_name,updates.client_name||null,updates.event_date||null,updates.public_title||null,updates.intro||null,
-    updates.experience_style,updates.primary_color,updates.secondary_color,updates.accent_color,updates.background_color,updates.text_color,id
+  const event=await env.DB.prepare(`SELECT * FROM events WHERE id=? LIMIT 1`).bind(id).first();if(!event)return json({ok:false,error:"not_found"},404);
+  const body=await readJson(request);if(!body)return bad("Dados invÃ¡lidos.");
+  const style=EXPERIENCE_STYLES.has(body.experience_style)?body.experience_style:event.experience_style;
+  await env.DB.prepare(`UPDATE events SET event_name=?,client_name=?,event_type=?,event_date=?,public_title=?,intro=?,experience_style=?,primary_color=?,secondary_color=?,accent_color=?,background_color=?,text_color=?,share_description=? WHERE id=?`).bind(
+    body.event_name!==undefined?clean(body.event_name,120):event.event_name,
+    body.client_name!==undefined?clean(body.client_name,120)||null:event.client_name,
+    EVENT_TYPES.has(body.event_type)?body.event_type:event.event_type,
+    body.event_date!==undefined?clean(body.event_date,20)||null:event.event_date,
+    body.public_title!==undefined?clean(body.public_title,160)||null:event.public_title,
+    body.intro!==undefined?clean(body.intro,800)||null:event.intro,
+    style,
+    body.primary_color?color(body.primary_color,event.primary_color):event.primary_color,
+    body.secondary_color?color(body.secondary_color,event.secondary_color):event.secondary_color,
+    body.accent_color?color(body.accent_color,event.accent_color):event.accent_color,
+    body.background_color?color(body.background_color,event.background_color):event.background_color,
+    body.text_color?color(body.text_color,event.text_color):event.text_color,
+    body.share_description!==undefined?clean(body.share_description,220)||null:event.share_description,id
   ).run();
-
   return json({ok:true});
 }
 
@@ -497,70 +374,63 @@ async function adminUploadPreview(request,env,id) {
 
 async function clientDashboard(env,event) {
   await cleanupExpiredReservations(env);
-
-  const giftsR = await env.DB.prepare(`
-    SELECT g.*,
-      COALESCE((SELECT SUM(amount_cents) FROM contributions c WHERE c.gift_id=g.id AND c.status='confirmed'),0) confirmed_cents,
-      COALESCE((SELECT COUNT(*) FROM contributions c WHERE c.gift_id=g.id AND c.status='confirmed'),0) contributor_count
-    FROM gifts g WHERE g.event_id=? ORDER BY g.display_order,g.created_at
-  `).bind(event.id).all();
-
-  const contribR = await env.DB.prepare(`
-    SELECT c.*,g.title gift_title,g.icon_name
-    FROM contributions c JOIN gifts g ON g.id=c.gift_id
-    WHERE c.event_id=? ORDER BY c.declared_at DESC
-  `).bind(event.id).all();
-
-  const reservR = await env.DB.prepare(`
-    SELECT r.*,g.title gift_title,g.icon_name,g.preferred_color
-    FROM reservations r JOIN gifts g ON g.id=r.gift_id
-    WHERE r.event_id=? ORDER BY r.created_at DESC
-  `).bind(event.id).all();
-
-  const gifts = (giftsR.results||[]).map(g=>({...g,image_url:g.image_path?mediaUrl(env,g.image_path):null}));
-
-  return json({
-    ok:true,
-    event:{
-      ...event,
-      preview_url:event.preview_path?mediaUrl(env,event.preview_path):null,
-      public_url:`${env.APP_URL}/e/${event.slug}`
-    },
-    gifts,
-    contributions:contribR.results||[],
-    reservations:reservR.results||[]
-  });
+  event=await ensurePreviewToken(env,event);
+  const giftsR=await env.DB.prepare(`SELECT g.*,COALESCE((SELECT SUM(amount_cents) FROM contributions c WHERE c.gift_id=g.id AND c.status='confirmed'),0) confirmed_cents,COALESCE((SELECT COUNT(*) FROM contributions c WHERE c.gift_id=g.id AND c.status='confirmed'),0) contributor_count FROM gifts g WHERE g.event_id=? ORDER BY g.display_order,g.created_at`).bind(event.id).all();
+  const contribR=await env.DB.prepare(`SELECT c.*,g.title gift_title,g.icon_name FROM contributions c JOIN gifts g ON g.id=c.gift_id WHERE c.event_id=? ORDER BY c.declared_at DESC`).bind(event.id).all();
+  const reservR=await env.DB.prepare(`SELECT r.*,g.title gift_title,g.icon_name,g.preferred_color FROM reservations r JOIN gifts g ON g.id=r.gift_id WHERE r.event_id=? ORDER BY r.created_at DESC`).bind(event.id).all();
+  const gifts=(giftsR.results||[]).map(g=>({...g,image_url:g.image_path?mediaUrl(env,g.image_path):null}));
+  const readiness=readinessFromCount(event,gifts.filter(g=>g.is_active&&Number(g.target_cents)>=100).length);
+  return json({ok:true,event:{...event,client_token_hash:undefined,preview_token:undefined,preview_url:event.preview_path?mediaUrl(env,event.preview_path):null,public_url:`${env.APP_URL}/e/${event.slug}`,private_preview_url:`${env.APP_URL}/preview/${event.slug}/${event.preview_token}`,display_status:displayState(event,readiness),readiness},gifts,contributions:contribR.results||[],reservations:reservR.results||[]});
 }
 
 async function clientUpdateEvent(request,env,event) {
-  const body = await readJson(request); if (!body) return bad("Dados inválidos.");
-
-  const status = ["draft","active","inactive"].includes(body.status) ? body.status : event.status;
-  const completed = COMPLETE_BEHAVIORS.has(body.completed_behavior) ? body.completed_behavior : event.completed_behavior;
-  const hours = body.reservation_hours !== undefined
-    ? Math.min(168,Math.max(1,int(body.reservation_hours)))
-    : Number(event.reservation_hours||48);
-
-  await env.DB.prepare(`
-    UPDATE events SET
-      event_name=?,event_date=?,intro=?,pix_key=?,pix_key_type=?,pix_holder_name=?,pix_city=?,
-      status=?,completed_behavior=?,reservation_hours=?,share_description=?
-    WHERE id=?
-  `).bind(
+  const body=await readJson(request);if(!body)return bad("Dados invÃ¡lidos.");
+  const completed=COMPLETE_BEHAVIORS.has(body.completed_behavior)?body.completed_behavior:event.completed_behavior;
+  const hours=body.reservation_hours!==undefined?Math.min(168,Math.max(1,int(body.reservation_hours))):Number(event.reservation_hours||48);
+  const style=EXPERIENCE_STYLES.has(body.experience_style)?body.experience_style:event.experience_style;
+  const onboarding=body.onboarding_completed!==undefined?(body.onboarding_completed?1:0):Number(event.onboarding_completed||0);
+  await env.DB.prepare(`UPDATE events SET event_name=?,event_date=?,intro=?,pix_key=?,pix_key_type=?,pix_holder_name=?,pix_city=?,experience_style=?,completed_behavior=?,reservation_hours=?,share_description=?,onboarding_completed=? WHERE id=?`).bind(
     body.event_name!==undefined?clean(body.event_name,120):event.event_name,
     body.event_date!==undefined?clean(body.event_date,20)||null:event.event_date,
     body.intro!==undefined?clean(body.intro,800)||null:event.intro,
     body.pix_key!==undefined?clean(body.pix_key,180)||null:event.pix_key,
-    body.pix_key_type!==undefined?clean(body.pix_key_type,20)||null:event.pix_key_type,
+    body.pix_key_type!==undefined?(PIX_TYPES.has(body.pix_key_type)?body.pix_key_type:null):event.pix_key_type,
     body.pix_holder_name!==undefined?clean(body.pix_holder_name,80)||null:event.pix_holder_name,
     body.pix_city!==undefined?clean(body.pix_city,50)||null:event.pix_city,
-    status,completed,hours,
-    body.share_description!==undefined?clean(body.share_description,220)||null:event.share_description,
-    event.id
+    style,completed,hours,
+    body.share_description!==undefined?clean(body.share_description,220)||null:event.share_description,onboarding,event.id
   ).run();
-
-  await log(env,event.id,"client","event_updated",{detail:status});
+  await log(env,event.id,"client","event_updated",{detail:"config"});
   return json({ok:true});
+}
+
+
+async function clientPublish(env,event) {
+  const readiness=await eventReadiness(env,event);
+  if(!readiness.ready)return json({ok:false,error:"not_ready",message:"Sua lista ainda precisa de alguns ajustes antes de ser publicada.",missing:readiness.missing},400);
+  await env.DB.prepare(`UPDATE events SET status='active',published_at=COALESCE(published_at,CURRENT_TIMESTAMP),onboarding_completed=1 WHERE id=?`).bind(event.id).run();
+  await log(env,event.id,"client","event_published");
+  return json({ok:true,status:"active",public_url:`${env.APP_URL}/e/${event.slug}`});
+}
+
+async function clientDeactivate(env,event) {
+  await env.DB.prepare(`UPDATE events SET status='inactive' WHERE id=?`).bind(event.id).run();
+  await log(env,event.id,"client","event_deactivated");
+  return json({ok:true,status:"inactive"});
+}
+
+async function clientBulkGifts(request,env,event) {
+  const body=await readJson(request);const items=Array.isArray(body?.gifts)?body.gifts.slice(0,20):[];
+  if(!items.length)return bad("Escolha pelo menos uma ideia.");
+  const statements=[];
+  for(let i=0;i<items.length;i++){
+    const x=items[i],title=clean(x.title,140);if(!title)continue;
+    const type=GIFT_TYPES.has(x.gift_type)?x.gift_type:"quota";
+    statements.push(env.DB.prepare(`INSERT INTO gifts(id,event_id,title,description,category,gift_type,target_cents,quantity,icon_name,preferred_color,allow_pix,allow_physical,is_active,display_order) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,1,?)`).bind(crypto.randomUUID(),event.id,title,clean(x.description,600)||null,clean(x.category,60)||"Outros",type,0,1,clean(x.icon_name,80)||"gift",clean(x.preferred_color,80)||null,1,type==="physical"?1:0,i));
+  }
+  if(!statements.length)return bad("Nenhuma ideia vÃ¡lida.");
+  await env.DB.batch(statements);await log(env,event.id,"client","starter_list_created",{detail:String(statements.length)});
+  return json({ok:true,created:statements.length},201);
 }
 
 async function clientDeleteEvent(request,env,event) {
@@ -574,54 +444,25 @@ async function clientDeleteEvent(request,env,event) {
 }
 
 async function clientCreateGift(request,env,event) {
-  const body = await readJson(request); if (!body) return bad("Dados inválidos.");
-  const title = clean(body.title,140);
-  const type = GIFT_TYPES.has(body.gift_type) ? body.gift_type : "quota";
-  const target = Math.max(0,int(body.target_cents));
-  if (!title) return bad("Informe o nome do desejo.");
-  if (type !== "physical" && target < 100) return bad("Informe um valor válido.");
-
-  const id = crypto.randomUUID();
-  const allowPhysical = type === "physical" ? 1 : 0;
-  await env.DB.prepare(`
-    INSERT INTO gifts
-      (id,event_id,title,description,category,gift_type,target_cents,quantity,icon_name,preferred_color,
-       allow_pix,allow_physical,is_active,display_order)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?, ?,1,?)
-  `).bind(
-    id,event.id,title,clean(body.description,600)||null,clean(body.category,60)||"Outros",type,target,
-    Math.max(1,int(body.quantity)||1),clean(body.icon_name,80)||"gift",clean(body.preferred_color,80)||null,
-    body.allow_pix===false?0:1,allowPhysical,Math.max(0,int(body.display_order)||0)
-  ).run();
+  const body=await readJson(request);if(!body)return bad("Dados invÃ¡lidos.");
+  const title=clean(body.title,140),type=GIFT_TYPES.has(body.gift_type)?body.gift_type:"quota",target=Math.max(0,int(body.target_cents));
+  if(!title)return bad("Informe o nome do desejo.");
+  if(target>0&&target<100)return bad("O valor mÃ­nimo Ã© R$ 1,00.");
+  const id=crypto.randomUUID(),allowPhysical=type==="physical"?1:0;
+  await env.DB.prepare(`INSERT INTO gifts(id,event_id,title,description,category,gift_type,target_cents,quantity,icon_name,preferred_color,allow_pix,allow_physical,is_active,display_order) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,1,?)`).bind(id,event.id,title,clean(body.description,600)||null,clean(body.category,60)||"Outros",type,target,Math.max(1,int(body.quantity)||1),clean(body.icon_name,80)||"gift",clean(body.preferred_color,80)||null,body.allow_pix===false?0:1,allowPhysical,Math.max(0,int(body.display_order)||0)).run();
   await log(env,event.id,"client","gift_created",{gift_id:id,detail:title});
   return json({ok:true,gift_id:id},201);
 }
 
 async function clientUpdateGift(request,env,event,giftId) {
-  const gift = await ownedGift(env,event.id,giftId); if (!gift) return json({ok:false,error:"not_found"},404);
-  const body = await readJson(request); if (!body) return bad("Dados inválidos.");
-  const type = GIFT_TYPES.has(body.gift_type) ? body.gift_type : gift.gift_type;
-
-  await env.DB.prepare(`
-    UPDATE gifts SET title=?,description=?,category=?,gift_type=?,target_cents=?,quantity=?,
-      icon_name=?,preferred_color=?,allow_pix=?,allow_physical=?,is_active=?,display_order=?
-    WHERE id=? AND event_id=?
-  `).bind(
-    body.title!==undefined?clean(body.title,140):gift.title,
-    body.description!==undefined?clean(body.description,600)||null:gift.description,
-    body.category!==undefined?clean(body.category,60)||"Outros":gift.category,
-    type,
-    body.target_cents!==undefined?Math.max(0,int(body.target_cents)):gift.target_cents,
-    body.quantity!==undefined?Math.max(1,int(body.quantity)||1):gift.quantity,
-    body.icon_name!==undefined?clean(body.icon_name,80)||"gift":gift.icon_name,
-    body.preferred_color!==undefined?clean(body.preferred_color,80)||null:gift.preferred_color,
-    body.allow_pix!==undefined?(body.allow_pix?1:0):gift.allow_pix,
-    type==="physical" ? 1 : (body.allow_physical!==undefined?(body.allow_physical?1:0):gift.allow_physical),
-    body.is_active!==undefined?(body.is_active?1:0):gift.is_active,
-    body.display_order!==undefined?Math.max(0,int(body.display_order)):gift.display_order,
-    giftId,event.id
-  ).run();
-  return json({ok:true});
+  const gift=await ownedGift(env,event.id,giftId);if(!gift)return json({ok:false,error:"not_found"},404);
+  const body=await readJson(request);if(!body)return bad("Dados invÃ¡lidos.");
+  const type=GIFT_TYPES.has(body.gift_type)?body.gift_type:gift.gift_type;
+  const target=body.target_cents!==undefined?Math.max(0,int(body.target_cents)):gift.target_cents;
+  if(target>0&&target<100)return bad("O valor mÃ­nimo Ã© R$ 1,00.");
+  await env.DB.prepare(`UPDATE gifts SET title=?,description=?,category=?,gift_type=?,target_cents=?,quantity=?,icon_name=?,preferred_color=?,allow_pix=?,allow_physical=?,is_active=?,display_order=? WHERE id=? AND event_id=?`).bind(
+    body.title!==undefined?clean(body.title,140):gift.title,body.description!==undefined?clean(body.description,600)||null:gift.description,body.category!==undefined?clean(body.category,60)||"Outros":gift.category,type,target,body.quantity!==undefined?Math.max(1,int(body.quantity)||1):gift.quantity,body.icon_name!==undefined?clean(body.icon_name,80)||"gift":gift.icon_name,body.preferred_color!==undefined?clean(body.preferred_color,80)||null:gift.preferred_color,body.allow_pix!==undefined?(body.allow_pix?1:0):gift.allow_pix,type==="physical"?1:(body.allow_physical!==undefined?(body.allow_physical?1:0):gift.allow_physical),body.is_active!==undefined?(body.is_active?1:0):gift.is_active,body.display_order!==undefined?Math.max(0,int(body.display_order)):gift.display_order,giftId,event.id
+  ).run();return json({ok:true});
 }
 
 async function clientDeleteGift(env,event,giftId) {
@@ -652,7 +493,7 @@ async function clientDeleteGiftImage(env,event,giftId) {
 async function clientSetContribution(env,event,id,status) {
   const row = await env.DB.prepare(`SELECT * FROM contributions WHERE id=? AND event_id=? LIMIT 1`).bind(id,event.id).first();
   if (!row) return json({ok:false,error:"not_found"},404);
-  if (!["pending","confirmed"].includes(row.status) && row.status !== status) return bad("Esta contribuição já foi encerrada.");
+  if (!["pending","confirmed"].includes(row.status) && row.status !== status) return bad("Esta contribuiÃ§Ã£o jÃ¡ foi encerrada.");
 
   if (status === "confirmed") {
     await env.DB.prepare(`UPDATE contributions SET status='confirmed',confirmed_at=CURRENT_TIMESTAMP,rejected_at=NULL WHERE id=?`).bind(id).run();
@@ -668,60 +509,26 @@ async function clientSetReservation(env,event,id,status) {
   if (!row) return json({ok:false,error:"not_found"},404);
 
   if (status === "received") {
-    if (!["reserved","purchased","received"].includes(row.status)) return bad("Esta reserva não pode ser marcada como recebida.");
+    if (!["reserved","purchased","received"].includes(row.status)) return bad("Esta reserva nÃ£o pode ser marcada como recebida.");
     await env.DB.prepare(`UPDATE reservations SET status='received',received_at=CURRENT_TIMESTAMP WHERE id=?`).bind(id).run();
   } else {
-    if (!["reserved","purchased"].includes(row.status)) return bad("Esta reserva não pode ser cancelada.");
+    if (!["reserved","purchased"].includes(row.status)) return bad("Esta reserva nÃ£o pode ser cancelada.");
     await env.DB.prepare(`UPDATE reservations SET status='cancelled',cancelled_at=CURRENT_TIMESTAMP WHERE id=?`).bind(id).run();
   }
   return json({ok:true,status});
 }
 
-async function serveSpa(request,env,slug) {
-  const assetUrl = new URL(request.url);
-  assetUrl.pathname = "/index.html";
-  const res = await env.ASSETS.fetch(new Request(assetUrl.toString(),request));
-  let html = await res.text();
-
-  let title = "Libri Presentes";
-  let desc = "Uma forma bonita, prática e leve de presentear.";
-  let image = "";
-  let canonical = env.APP_URL || new URL(request.url).origin;
-
-  if (slug) {
-    const event = await env.DB.prepare(`SELECT event_name,public_title,intro,share_description,preview_path,slug FROM events WHERE slug=? LIMIT 1`).bind(slug).first();
-    if (event) {
-      title = `${event.event_name} | Libri Presentes`;
-      desc = event.share_description || event.intro || event.public_title || desc;
-      image = event.preview_path ? mediaUrl(env,event.preview_path) : "";
-      canonical = `${env.APP_URL}/e/${event.slug}`;
-    }
+async function serveSpa(request,env,slug,isPreview=false) {
+  const assetUrl=new URL(request.url);assetUrl.pathname="/index.html";
+  const res=await env.ASSETS.fetch(new Request(assetUrl.toString(),request));
+  let html=await res.text(),title="Libri Presentes",desc="Uma forma bonita, prÃ¡tica e leve de presentear.",image="",canonical=env.APP_URL||new URL(request.url).origin;
+  if(slug){
+    const event=await env.DB.prepare(`SELECT event_name,public_title,intro,share_description,preview_path,slug FROM events WHERE slug=? LIMIT 1`).bind(slug).first();
+    if(event){title=`${event.event_name} | Libri Presentes`;desc=event.share_description||event.intro||event.public_title||desc;image=event.preview_path?mediaUrl(env,event.preview_path):"";canonical=isPreview?new URL(request.url).origin+new URL(request.url).pathname:`${env.APP_URL}/e/${event.slug}`;}
   }
-
-  const meta = [
-    `<meta property="og:title" content="${htmlAttr(title)}">`,
-    `<meta property="og:description" content="${htmlAttr(desc)}">`,
-    `<meta property="og:type" content="website">`,
-    `<meta property="og:url" content="${htmlAttr(canonical)}">`,
-    image ? `<meta property="og:image" content="${htmlAttr(image)}">` : "",
-    `<meta name="twitter:card" content="${image?"summary_large_image":"summary"}">`,
-    `<link rel="canonical" href="${htmlAttr(canonical)}">`
-  ].filter(Boolean).join("\n");
-
-  html = html
-    .replace("<!--DYNAMIC_META-->",meta)
-    .replace("<title>Libri Presentes</title>",`<title>${htmlAttr(title)}</title>`);
-
-  return new Response(html,{
-    status:200,
-    headers:{
-      "content-type":"text/html; charset=utf-8",
-      "cache-control":"no-cache",
-      "x-content-type-options":"nosniff",
-      "referrer-policy":"strict-origin-when-cross-origin",
-      "x-frame-options":"DENY"
-    }
-  });
+  const meta=[`<meta property="og:title" content="${htmlAttr(title)}">`,`<meta property="og:description" content="${htmlAttr(desc)}">`,`<meta property="og:type" content="website">`,`<meta property="og:url" content="${htmlAttr(canonical)}">`,image?`<meta property="og:image" content="${htmlAttr(image)}">`:"",`<meta name="twitter:card" content="${image?"summary_large_image":"summary"}">`,`<link rel="canonical" href="${htmlAttr(canonical)}">`].filter(Boolean).join("\n");
+  html=html.replace("<!--DYNAMIC_META-->",meta).replace("<title>Libri Presentes</title>",`<title>${htmlAttr(title)}</title>`);
+  return new Response(html,{status:200,headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-cache","x-content-type-options":"nosniff","referrer-policy":"strict-origin-when-cross-origin","x-frame-options":"SAMEORIGIN"}});
 }
 
 async function handleMedia(request,env,url) {
@@ -741,6 +548,34 @@ async function handleMedia(request,env,url) {
   headers.set("cache-control","public,max-age=31536000,immutable");
   headers.set("x-content-type-options","nosniff");
   return new Response(request.method==="HEAD"?null:obj.body,{headers});
+}
+
+
+async function ensurePreviewToken(env,event){
+  if(event.preview_token)return event;
+  const token=randomToken();await env.DB.prepare(`UPDATE events SET preview_token=? WHERE id=?`).bind(token,event.id).run();
+  return {...event,preview_token:token};
+}
+
+function readinessFromCount(event,validGiftCount){
+  const missing=[];
+  if(!clean(event.event_name,120))missing.push("Nome do evento");
+  if(!clean(event.pix_key,180))missing.push("Chave Pix");
+  if(!clean(event.pix_holder_name,80))missing.push("Nome do titular do Pix");
+  if(!clean(event.pix_city,50))missing.push("Cidade do titular do Pix");
+  if(Number(validGiftCount||0)<1)missing.push("Pelo menos um desejo com valor definido");
+  return {ready:missing.length===0,missing,valid_gift_count:Number(validGiftCount||0)};
+}
+
+async function eventReadiness(env,event){
+  const row=await env.DB.prepare(`SELECT COUNT(*) n FROM gifts WHERE event_id=? AND is_active=1 AND target_cents>=100`).bind(event.id).first();
+  return readinessFromCount(event,Number(row?.n||0));
+}
+
+function displayState(event,readiness){
+  if(event.status==="active")return "active";
+  if(event.status==="inactive")return "inactive";
+  return readiness?.ready?"ready":"configuring";
 }
 
 async function activeEventBySlug(env,slug) {
@@ -764,7 +599,7 @@ async function readJson(request) {
 }
 async function readImage(request,env) {
   const type = (request.headers.get("content-type")||"").split(";")[0].trim().toLowerCase();
-  if (!ALLOWED_IMAGE_TYPES.has(type)) return {response:bad("Formato de imagem não aceito.")};
+  if (!ALLOWED_IMAGE_TYPES.has(type)) return {response:bad("Formato de imagem nÃ£o aceito.")};
   const bytes = await request.arrayBuffer();
   const max = Number(env.MAX_UPLOAD_BYTES||307200);
   if (!bytes.byteLength || bytes.byteLength > max) return {response:bad("Imagem maior que o limite permitido.")};
