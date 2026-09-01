@@ -1,0 +1,1 @@
+ALTER TABLE events ADD COLUMN client_access_token TEXT;
