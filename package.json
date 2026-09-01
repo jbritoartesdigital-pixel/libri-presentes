@@ -1,13 +1,18 @@
 {
   "name": "libri-presentes",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Libri Presentes - experiência de presentes para casamentos e celebrações.",
+  "description": "Libri Presentes - listas de presentes, cotas e experiÃªncias personalizadas.",
   "scripts": {
     "dev": "wrangler dev --config wrangler.jsonc",
     "deploy": "wrangler deploy --config wrangler.jsonc",
+    "prepare:assets": "node scripts/prepare-assets.mjs",
     "migrate:local": "wrangler d1 migrations apply libri-presentes-db --local --config wrangler.jsonc",
     "migrate:remote": "wrangler d1 migrations apply libri-presentes-db --remote --config wrangler.jsonc"
+  },
+  "dependencies": {
+    "@tabler/icons-webfont": "3.46.0",
+    "qrcode-generator": "1.4.4"
   },
   "devDependencies": {
     "wrangler": "4.125.0"
