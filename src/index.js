@@ -27,7 +27,7 @@ export default {
       return await serveSpa(request, env, null, false);
     } catch (error) {
       console.error("Unhandled:", error);
-      return json({ok:false,error:"internal_error",message:"NÃ£o foi possÃ­vel concluir esta solicitaÃ§Ã£o."},500);
+      return json({ok:false,error:"internal_error",message:"N\u00e3o foi poss\u00edvel concluir esta solicita\u00e7\u00e3o."},500);
     }
   }
 };
@@ -120,7 +120,7 @@ async function handleApi(request, env, url) {
   m=p.match(/^\/api\/client\/reservations\/([^/]+)\/cancel$/);
   if(m&&method==="POST"){const client=await requireClient(request,env);if(client.response)return client.response;return clientSetReservation(env,client.event,m[1],"cancelled");}
 
-  return json({ok:false,error:"not_found",message:"Rota nÃ£o encontrada."},404);
+  return json({ok:false,error:"not_found",message:"Rota n\u00e3o encontrada."},404);
 }
 
 async function getPublicEvent(env, slug, previewToken=null) {
@@ -133,15 +133,15 @@ async function getPublicEvent(env, slug, previewToken=null) {
       preview_token,onboarding_completed,published_at
     FROM events WHERE slug=? LIMIT 1
   `).bind(slug).first();
-  if(!event)return json({ok:false,error:"event_not_found",message:"Evento nÃ£o encontrado."},404);
+  if(!event)return json({ok:false,error:"event_not_found",message:"Evento n\u00e3o encontrado."},404);
 
   const isPreview=Boolean(previewToken);
   if(isPreview && (!event.preview_token || previewToken!==event.preview_token)){
-    return json({ok:false,error:"preview_forbidden",message:"Esta prÃ©via nÃ£o estÃ¡ mais disponÃ­vel."},403);
+    return json({ok:false,error:"preview_forbidden",message:"Esta pr\u00e9via n\u00e3o est\u00e1 mais dispon\u00edvel."},403);
   }
   if(!isPreview && event.status!=="active"){
     const ready=await eventReadiness(env,event);
-    return json({ok:false,error:"event_unavailable",display_status:displayState(event,ready),message:event.status==="inactive"?"Esta lista foi desativada.":"Esta lista ainda estÃ¡ sendo preparada."},409);
+    return json({ok:false,error:"event_unavailable",display_status:displayState(event,ready),message:event.status==="inactive"?"Esta lista foi desativada.":"Esta lista ainda est\u00e1 sendo preparada."},409);
   }
 
   const rows=await env.DB.prepare(`
@@ -168,14 +168,14 @@ async function getPublicEvent(env, slug, previewToken=null) {
 
 async function createContribution(request, env, slug) {
   const event=await activeEventBySlug(env,slug);
-  if(!event)return json({ok:false,error:"event_not_found",message:"Esta lista nÃ£o estÃ¡ disponÃ­vel."},404);
-  const body=await readJson(request);if(!body)return bad("Dados invÃ¡lidos.");
+  if(!event)return json({ok:false,error:"event_not_found",message:"Esta lista n\u00e3o est\u00e1 dispon\u00edvel."},404);
+  const body=await readJson(request);if(!body)return bad("Dados inv\u00e1lidos.");
   const gift=await env.DB.prepare(`SELECT * FROM gifts WHERE id=? AND event_id=? AND is_active=1 AND target_cents>=100 LIMIT 1`).bind(clean(body.gift_id,80),event.id).first();
-  if(!gift||!gift.allow_pix)return bad("Este desejo nÃ£o aceita contribuiÃ§Ã£o via Pix.");
+  if(!gift||!gift.allow_pix)return bad("Este desejo n\u00e3o aceita contribui\u00e7\u00e3o via Pix.");
   const guestName=clean(body.guest_name,100),guestContact=clean(body.guest_contact,160),guestMessage=clean(body.guest_message,500),amount=int(body.amount_cents);
-  if(!guestName||!guestContact||amount<100)return bad("Informe seu nome, contato e um valor vÃ¡lido.");
+  if(!guestName||!guestContact||amount<100)return bad("Informe seu nome, contato e um valor v\u00e1lido.");
   const confirmed=await confirmedForGift(env,gift.id),remaining=Math.max(0,Number(gift.target_cents)-confirmed);
-  if(remaining<=0&&event.completed_behavior!=="allow_extra")return bad("Este desejo jÃ¡ foi realizado.");
+  if(remaining<=0&&event.completed_behavior!=="allow_extra")return bad("Este desejo j\u00e1 foi realizado.");
   if(event.completed_behavior!=="allow_extra"&&amount>remaining)return json({ok:false,error:"amount_too_high",message:"O valor ultrapassa o que falta para completar este desejo.",max_cents:remaining},400);
   const id=crypto.randomUUID();
   await env.DB.prepare(`INSERT INTO contributions(id,event_id,gift_id,guest_name,guest_contact,amount_cents,status,payment_method,guest_message) VALUES(?,?,?,?,?,?,'pending','pix',?)`).bind(id,event.id,gift.id,guestName,guestContact,amount,guestMessage||null).run();
@@ -189,12 +189,12 @@ async function createReservation(request, env, slug) {
   if (!event) return json({ok:false,error:"event_not_found"},404);
 
   const body = await readJson(request);
-  if (!body) return bad("Dados invÃ¡lidos.");
+  if (!body) return bad("Dados inv\u00e1lidos.");
 
   const gift = await env.DB.prepare(`SELECT * FROM gifts WHERE id=? AND event_id=? AND is_active=1 LIMIT 1`)
     .bind(clean(body.gift_id,80),event.id).first();
 
-  if (!gift || gift.gift_type !== "physical" || !gift.allow_physical) return bad("Este presente nÃ£o aceita reserva.");
+  if (!gift || gift.gift_type !== "physical" || !gift.allow_physical) return bad("Este presente n\u00e3o aceita reserva.");
 
   const guestName = clean(body.guest_name,100);
   const guestContact = clean(body.guest_contact,160);
@@ -205,7 +205,7 @@ async function createReservation(request, env, slug) {
     WHERE gift_id=? AND status IN ('reserved','purchased','received')
   `).bind(gift.id).first();
 
-  if (Number(countRow?.n || 0) >= Number(gift.quantity || 1)) return bad("Este presente jÃ¡ estÃ¡ reservado.");
+  if (Number(countRow?.n || 0) >= Number(gift.quantity || 1)) return bad("Este presente j\u00e1 est\u00e1 reservado.");
 
   const rawToken = randomToken();
   const tokenHash = await sha256(rawToken);
@@ -249,7 +249,7 @@ async function markReservationPurchased(env, rawToken) {
   const hash = await sha256(rawToken);
   const row = await env.DB.prepare(`SELECT * FROM reservations WHERE manage_token_hash=? LIMIT 1`).bind(hash).first();
   if (!row) return json({ok:false,error:"reservation_not_found"},404);
-  if (!["reserved","purchased"].includes(row.status)) return bad("Esta reserva nÃ£o pode ser alterada.");
+  if (!["reserved","purchased"].includes(row.status)) return bad("Esta reserva n\u00e3o pode ser alterada.");
   await env.DB.prepare(`UPDATE reservations SET status='purchased',purchased_at=CURRENT_TIMESTAMP WHERE id=?`).bind(row.id).run();
   await log(env,row.event_id,"guest","gift_purchased",{gift_id:row.gift_id,reservation_id:row.id});
   return json({ok:true,status:"purchased"});
@@ -259,7 +259,7 @@ async function cancelReservation(env, rawToken) {
   const hash = await sha256(rawToken);
   const row = await env.DB.prepare(`SELECT * FROM reservations WHERE manage_token_hash=? LIMIT 1`).bind(hash).first();
   if (!row) return json({ok:false,error:"reservation_not_found"},404);
-  if (!["reserved","purchased"].includes(row.status)) return bad("Esta reserva nÃ£o pode ser cancelada.");
+  if (!["reserved","purchased"].includes(row.status)) return bad("Esta reserva n\u00e3o pode ser cancelada.");
   await env.DB.prepare(`UPDATE reservations SET status='cancelled',cancelled_at=CURRENT_TIMESTAMP WHERE id=?`).bind(row.id).run();
   await log(env,row.event_id,"guest","reservation_cancelled",{gift_id:row.gift_id,reservation_id:row.id});
   return json({ok:true,status:"cancelled"});
@@ -268,7 +268,7 @@ async function cancelReservation(env, rawToken) {
 function requireAdmin(request, env) {
   const supplied = request.headers.get("x-admin-key") || "";
   if (!env.ADMIN_KEY || supplied !== env.ADMIN_KEY) {
-    return json({ok:false,error:"unauthorized",message:"Acesso nÃ£o autorizado."},401);
+    return json({ok:false,error:"unauthorized",message:"Acesso n\u00e3o autorizado."},401);
   }
   return null;
 }
@@ -299,11 +299,11 @@ async function adminListEvents(env) {
 }
 
 async function adminCreateEvent(request, env) {
-  const body=await readJson(request);if(!body)return bad("Dados invÃ¡lidos.");
+  const body=await readJson(request);if(!body)return bad("Dados inv\u00e1lidos.");
   const eventName=clean(body.event_name,120),slug=slugify(body.slug||eventName),eventType=EVENT_TYPES.has(body.event_type)?body.event_type:"wedding",style=EXPERIENCE_STYLES.has(body.experience_style)?body.experience_style:"home";
-  if(!eventName||!slug)return bad("Nome e slug sÃ£o obrigatÃ³rios.");
+  if(!eventName||!slug)return bad("Nome e slug s\u00e3o obrigat\u00f3rios.");
   const exists=await env.DB.prepare(`SELECT id FROM events WHERE slug=? LIMIT 1`).bind(slug).first();
-  if(exists)return json({ok:false,error:"slug_exists",message:"Este slug jÃ¡ estÃ¡ em uso."},409);
+  if(exists)return json({ok:false,error:"slug_exists",message:"Este slug j\u00e1 est\u00e1 em uso."},409);
   const clientToken=randomToken(),tokenHash=await sha256(clientToken),previewToken=randomToken(),id=crypto.randomUUID();
   await env.DB.prepare(`
     INSERT INTO events(id,slug,event_name,client_name,event_type,event_date,status,public_title,intro,
@@ -330,7 +330,7 @@ async function adminGetEvent(env,id) {
 
 async function adminUpdateEvent(request, env, id) {
   const event=await env.DB.prepare(`SELECT * FROM events WHERE id=? LIMIT 1`).bind(id).first();if(!event)return json({ok:false,error:"not_found"},404);
-  const body=await readJson(request);if(!body)return bad("Dados invÃ¡lidos.");
+  const body=await readJson(request);if(!body)return bad("Dados inv\u00e1lidos.");
   const style=EXPERIENCE_STYLES.has(body.experience_style)?body.experience_style:event.experience_style;
   await env.DB.prepare(`UPDATE events SET event_name=?,client_name=?,event_type=?,event_date=?,public_title=?,intro=?,experience_style=?,primary_color=?,secondary_color=?,accent_color=?,background_color=?,text_color=?,share_description=? WHERE id=?`).bind(
     body.event_name!==undefined?clean(body.event_name,120):event.event_name,
@@ -384,7 +384,7 @@ async function clientDashboard(env,event) {
 }
 
 async function clientUpdateEvent(request,env,event) {
-  const body=await readJson(request);if(!body)return bad("Dados invÃ¡lidos.");
+  const body=await readJson(request);if(!body)return bad("Dados inv\u00e1lidos.");
   const completed=COMPLETE_BEHAVIORS.has(body.completed_behavior)?body.completed_behavior:event.completed_behavior;
   const hours=body.reservation_hours!==undefined?Math.min(168,Math.max(1,int(body.reservation_hours))):Number(event.reservation_hours||48);
   const style=EXPERIENCE_STYLES.has(body.experience_style)?body.experience_style:event.experience_style;
@@ -428,7 +428,7 @@ async function clientBulkGifts(request,env,event) {
     const type=GIFT_TYPES.has(x.gift_type)?x.gift_type:"quota";
     statements.push(env.DB.prepare(`INSERT INTO gifts(id,event_id,title,description,category,gift_type,target_cents,quantity,icon_name,preferred_color,allow_pix,allow_physical,is_active,display_order) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,1,?)`).bind(crypto.randomUUID(),event.id,title,clean(x.description,600)||null,clean(x.category,60)||"Outros",type,0,1,clean(x.icon_name,80)||"gift",clean(x.preferred_color,80)||null,1,type==="physical"?1:0,i));
   }
-  if(!statements.length)return bad("Nenhuma ideia vÃ¡lida.");
+  if(!statements.length)return bad("Nenhuma ideia v\u00e1lida.");
   await env.DB.batch(statements);await log(env,event.id,"client","starter_list_created",{detail:String(statements.length)});
   return json({ok:true,created:statements.length},201);
 }
@@ -444,10 +444,10 @@ async function clientDeleteEvent(request,env,event) {
 }
 
 async function clientCreateGift(request,env,event) {
-  const body=await readJson(request);if(!body)return bad("Dados invÃ¡lidos.");
+  const body=await readJson(request);if(!body)return bad("Dados inv\u00e1lidos.");
   const title=clean(body.title,140),type=GIFT_TYPES.has(body.gift_type)?body.gift_type:"quota",target=Math.max(0,int(body.target_cents));
   if(!title)return bad("Informe o nome do desejo.");
-  if(target>0&&target<100)return bad("O valor mÃ­nimo Ã© R$ 1,00.");
+  if(target>0&&target<100)return bad("O valor m\u00ednimo \u00e9 R$ 1,00.");
   const id=crypto.randomUUID(),allowPhysical=type==="physical"?1:0;
   await env.DB.prepare(`INSERT INTO gifts(id,event_id,title,description,category,gift_type,target_cents,quantity,icon_name,preferred_color,allow_pix,allow_physical,is_active,display_order) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,1,?)`).bind(id,event.id,title,clean(body.description,600)||null,clean(body.category,60)||"Outros",type,target,Math.max(1,int(body.quantity)||1),clean(body.icon_name,80)||"gift",clean(body.preferred_color,80)||null,body.allow_pix===false?0:1,allowPhysical,Math.max(0,int(body.display_order)||0)).run();
   await log(env,event.id,"client","gift_created",{gift_id:id,detail:title});
@@ -456,10 +456,10 @@ async function clientCreateGift(request,env,event) {
 
 async function clientUpdateGift(request,env,event,giftId) {
   const gift=await ownedGift(env,event.id,giftId);if(!gift)return json({ok:false,error:"not_found"},404);
-  const body=await readJson(request);if(!body)return bad("Dados invÃ¡lidos.");
+  const body=await readJson(request);if(!body)return bad("Dados inv\u00e1lidos.");
   const type=GIFT_TYPES.has(body.gift_type)?body.gift_type:gift.gift_type;
   const target=body.target_cents!==undefined?Math.max(0,int(body.target_cents)):gift.target_cents;
-  if(target>0&&target<100)return bad("O valor mÃ­nimo Ã© R$ 1,00.");
+  if(target>0&&target<100)return bad("O valor m\u00ednimo \u00e9 R$ 1,00.");
   await env.DB.prepare(`UPDATE gifts SET title=?,description=?,category=?,gift_type=?,target_cents=?,quantity=?,icon_name=?,preferred_color=?,allow_pix=?,allow_physical=?,is_active=?,display_order=? WHERE id=? AND event_id=?`).bind(
     body.title!==undefined?clean(body.title,140):gift.title,body.description!==undefined?clean(body.description,600)||null:gift.description,body.category!==undefined?clean(body.category,60)||"Outros":gift.category,type,target,body.quantity!==undefined?Math.max(1,int(body.quantity)||1):gift.quantity,body.icon_name!==undefined?clean(body.icon_name,80)||"gift":gift.icon_name,body.preferred_color!==undefined?clean(body.preferred_color,80)||null:gift.preferred_color,body.allow_pix!==undefined?(body.allow_pix?1:0):gift.allow_pix,type==="physical"?1:(body.allow_physical!==undefined?(body.allow_physical?1:0):gift.allow_physical),body.is_active!==undefined?(body.is_active?1:0):gift.is_active,body.display_order!==undefined?Math.max(0,int(body.display_order)):gift.display_order,giftId,event.id
   ).run();return json({ok:true});
@@ -493,7 +493,7 @@ async function clientDeleteGiftImage(env,event,giftId) {
 async function clientSetContribution(env,event,id,status) {
   const row = await env.DB.prepare(`SELECT * FROM contributions WHERE id=? AND event_id=? LIMIT 1`).bind(id,event.id).first();
   if (!row) return json({ok:false,error:"not_found"},404);
-  if (!["pending","confirmed"].includes(row.status) && row.status !== status) return bad("Esta contribuiÃ§Ã£o jÃ¡ foi encerrada.");
+  if (!["pending","confirmed"].includes(row.status) && row.status !== status) return bad("Esta contribui\u00e7\u00e3o j\u00e1 foi encerrada.");
 
   if (status === "confirmed") {
     await env.DB.prepare(`UPDATE contributions SET status='confirmed',confirmed_at=CURRENT_TIMESTAMP,rejected_at=NULL WHERE id=?`).bind(id).run();
@@ -509,10 +509,10 @@ async function clientSetReservation(env,event,id,status) {
   if (!row) return json({ok:false,error:"not_found"},404);
 
   if (status === "received") {
-    if (!["reserved","purchased","received"].includes(row.status)) return bad("Esta reserva nÃ£o pode ser marcada como recebida.");
+    if (!["reserved","purchased","received"].includes(row.status)) return bad("Esta reserva n\u00e3o pode ser marcada como recebida.");
     await env.DB.prepare(`UPDATE reservations SET status='received',received_at=CURRENT_TIMESTAMP WHERE id=?`).bind(id).run();
   } else {
-    if (!["reserved","purchased"].includes(row.status)) return bad("Esta reserva nÃ£o pode ser cancelada.");
+    if (!["reserved","purchased"].includes(row.status)) return bad("Esta reserva n\u00e3o pode ser cancelada.");
     await env.DB.prepare(`UPDATE reservations SET status='cancelled',cancelled_at=CURRENT_TIMESTAMP WHERE id=?`).bind(id).run();
   }
   return json({ok:true,status});
@@ -521,7 +521,7 @@ async function clientSetReservation(env,event,id,status) {
 async function serveSpa(request,env,slug,isPreview=false) {
   const assetUrl=new URL(request.url);assetUrl.pathname="/index.html";
   const res=await env.ASSETS.fetch(new Request(assetUrl.toString(),request));
-  let html=await res.text(),title="Libri Presentes",desc="Uma forma bonita, prÃ¡tica e leve de presentear.",image="",canonical=env.APP_URL||new URL(request.url).origin;
+  let html=await res.text(),title="Libri Presentes",desc="Uma forma bonita, pr\u00e1tica e leve de presentear.",image="",canonical=env.APP_URL||new URL(request.url).origin;
   if(slug){
     const event=await env.DB.prepare(`SELECT event_name,public_title,intro,share_description,preview_path,slug FROM events WHERE slug=? LIMIT 1`).bind(slug).first();
     if(event){title=`${event.event_name} | Libri Presentes`;desc=event.share_description||event.intro||event.public_title||desc;image=event.preview_path?mediaUrl(env,event.preview_path):"";canonical=isPreview?new URL(request.url).origin+new URL(request.url).pathname:`${env.APP_URL}/e/${event.slug}`;}
@@ -599,7 +599,7 @@ async function readJson(request) {
 }
 async function readImage(request,env) {
   const type = (request.headers.get("content-type")||"").split(";")[0].trim().toLowerCase();
-  if (!ALLOWED_IMAGE_TYPES.has(type)) return {response:bad("Formato de imagem nÃ£o aceito.")};
+  if (!ALLOWED_IMAGE_TYPES.has(type)) return {response:bad("Formato de imagem n\u00e3o aceito.")};
   const bytes = await request.arrayBuffer();
   const max = Number(env.MAX_UPLOAD_BYTES||307200);
   if (!bytes.byteLength || bytes.byteLength > max) return {response:bad("Imagem maior que o limite permitido.")};
