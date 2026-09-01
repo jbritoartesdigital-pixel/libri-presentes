@@ -7,25 +7,34 @@
   <meta name="robots" content="noindex,nofollow,noarchive">
   <!--DYNAMIC_META-->
   <title>Libri Presentes</title>
-  <link rel="stylesheet" href="/vendor/tabler-icons.min.css?v=20260901c">
-  <link rel="stylesheet" href="/styles.css?v=20260901c">
+  <link rel="stylesheet" href="/vendor/tabler-icons.min.css?v=20260901d">
+  <link rel="stylesheet" href="/styles.css?v=20260901d">
 </head>
 <body>
-  <main id="app"></main>
+  <main id="app">
+    <section style="min-height:100vh;display:grid;place-items:center;padding:24px;background:#f7f3ee;color:#292622;font-family:system-ui,sans-serif">
+      <div style="max-width:520px;text-align:center">
+        <h1 style="font-family:Georgia,serif;font-weight:400;margin-bottom:8px">Abrindo Libri Presentes...</h1>
+        <p style="line-height:1.6;color:#756d66;margin:0">Preparando seu acesso.</p>
+      </div>
+    </section>
+  </main>
   <div id="modalRoot"></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script src="/vendor/qrcode-generator.js?v=20260901c"></script>
-  <script src="/app.js?v=20260901c"></script>
-  <script>
+  <script data-cfasync="false" src="/vendor/qrcode-generator.js?v=20260901d"></script>
+  <script data-cfasync="false" src="/app.js?v=20260901d"></script>
+  <script data-cfasync="false">
     window.setTimeout(function () {
       var el = document.getElementById("app");
-      if (el && !el.innerHTML.trim()) {
+      if (!el) return;
+      var text = el.textContent || "";
+      if (text.indexOf("Abrindo Libri Presentes") !== -1) {
         el.innerHTML =
           '<section style="min-height:100vh;display:grid;place-items:center;padding:24px;background:#f7f3ee;color:#292622;font-family:system-ui,sans-serif">' +
           '<div style="max-width:520px;text-align:center">' +
           '<h1 style="font-family:Georgia,serif;font-weight:400">Libri Presentes nao iniciou.</h1>' +
-          '<p style="line-height:1.6;color:#756d66">O HTML abriu, mas o JavaScript principal nao executou. Isso confirma um problema de carregamento do app.js.</p>' +
+          '<p style="line-height:1.6;color:#756d66">O HTML abriu, mas o JavaScript principal nao executou.</p>' +
           '<code style="display:block;background:#fff;padding:12px;border-radius:12px;margin-top:14px">DIAGNOSTICO: APP_JS_NAO_EXECUTOU</code>' +
           '</div></section>';
       }
