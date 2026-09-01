@@ -21,7 +21,7 @@
     {
       "binding": "DB",
       "database_name": "libri-presentes-db",
-      "database_id": "COLE_O_DATABASE_ID_AQUI",
+      "database_id": "c8e4cfa6-2071-4b5e-b33c-bb50456054b7",
       "migrations_dir": "./migrations"
     }
   ],
