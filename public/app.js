@@ -113,9 +113,64 @@ async function libriPublicPage(slug,previewToken){
 function libriRenderPublic(){
  const e=publicState.event,g=publicState.gifts,total=g.reduce((s,x)=>s+Number(x.target_cents||0),0),confirmed=g.reduce((s,x)=>s+Number(x.confirmed_cents||0),0),p=percent(confirmed,total);
  const cats=['Todos',...new Set(g.map(x=>x.category).filter(Boolean))];
- app.innerHTML=`<div class="public style-${attr(e.experience_style||'home')}">${publicState.isPreview?'<div class="public-preview-ribbon"><i class="ti ti-eye"></i> PR\u00c9VIA PRIVADA \u00b7 a\u00e7\u00f5es desativadas</div>':''}<section class="public-hero"><div class="wrap public-hero-inner"><div class="public-brand"><i class="ti ti-gift"></i> LIBRI PRESENTES</div><div class="hero-stage"><div class="hero-copy"><div class="kicker">${esc(e.public_title||eventTypeLabel(e.event_type))}</div><h1>${esc(e.event_name)}</h1><p>${esc(e.intro||'Escolha um desejo e participe desta nova fase do seu jeito.')}</p>${e.event_date?`<div class="hero-date"><i class="ti ti-calendar-heart"></i>${esc(datePt(e.event_date))}</div>`:''}<div class="hero-actions"><button class="btn" onclick="document.querySelector('#desejos').scrollIntoView({behavior:'smooth'})"><i class="ti ti-heart"></i> Conhecer nossos desejos</button></div></div>${libriStoryVisual(e.experience_style,p,e.event_name)}</div><div class="scroll-cue"><span>Uma hist\u00f3ria constru\u00edda por quem faz parte dela</span><i class="ti ti-arrow-down"></i></div></div></section>
- ${libriStoryBoard(p,cats.filter(x=>x!=='Todos').slice(0,4))}
- <section class="public-section wrap" id="desejos"><div class="section-head"><div><div class="kicker">ESCOLHA DO SEU JEITO</div><h2>Desejos com hist\u00f3ria.</h2></div><p>Nada de loja obrigat\u00f3ria. Voc\u00ea pode contribuir com uma cota, viver uma experi\u00eancia junto com o casal ou comprar um presente f\u00edsico onde preferir.</p></div><div class="filters" id="catFilters">${cats.map(c=>`<button class="filter ${publicState.category===c?'active':''}" onclick="libriSetCategory(${js(c)})">${esc(c)}</button>`).join('')}</div><div class="filters" id="priceFilters">${priceFiltersHtml()}</div><div class="wish-stream" id="wishStream">${publicWishCards()}</div></section><footer class="public-footer wrap">Feito com <b>Libri Presentes</b> \u00b7 o valor do Pix vai direto para o casal</footer></div>`;
+ const count=g.length;
+ app.innerHTML=`<div class="public public-v3 style-${attr(e.experience_style||'home')}">
+ ${publicState.isPreview?'<div class="public-preview-ribbon"><i class="ti ti-eye"></i> PREVIA PRIVADA \u00b7 acoes desativadas</div>':''}
+ <section class="public-v3-hero">
+  <div class="wrap public-v3-hero-inner">
+   <div class="public-v3-topline">
+    <div class="public-v3-brand"><span class="public-v3-brandmark"><i class="ti ti-gift"></i></span><span>LIBRI PRESENTES</span></div>
+    ${e.event_date?`<span class="public-v3-date"><i class="ti ti-calendar-heart"></i>${esc(datePt(e.event_date))}</span>`:''}
+   </div>
+   <div class="public-v3-copy">
+    <div class="public-v3-eyebrow">${esc(e.public_title||eventTypeLabel(e.event_type))}</div>
+    <h1>${esc(e.event_name)}</h1>
+    <p>${esc(e.intro||'Escolha um presente e participe desta fase com a gente.')}</p>
+    <button class="public-v3-cta" onclick="document.querySelector('#desejos').scrollIntoView({behavior:'smooth'})"><span>Ver lista de presentes</span><i class="ti ti-arrow-down"></i></button>
+   </div>
+  </div>
+ </section>
+
+ <div class="wrap public-v3-progress">
+  <div class="public-v3-progress-copy">
+   <span><b>${p}%</b> da lista realizada</span>
+   <small>${count} desejo${count===1?'':'s'} \u00b7 somente presentes confirmados entram no progresso</small>
+  </div>
+  <div class="public-v3-progress-track"><span style="width:${p}%"></span></div>
+ </div>
+
+ <section class="wrap public-v3-list" id="desejos">
+  <div class="public-v3-list-head">
+   <div>
+    <span class="public-v3-eyebrow">ESCOLHA UM PRESENTE</span>
+    <h2>Um carinho do seu jeito.</h2>
+   </div>
+   <p>Contribua por Pix ou, nos presentes fisicos, compre onde preferir.</p>
+  </div>
+
+  <div class="public-v3-category-row" id="catFilters">
+   ${cats.map(c=>`<button class="public-v3-chip ${publicState.category===c?'active':''}" onclick="libriSetCategory(${js(c)})">${esc(c)}</button>`).join('')}
+  </div>
+
+  <details class="public-v3-more">
+   <summary><i class="ti ti-adjustments-horizontal"></i> Filtrar por valor</summary>
+   <div class="public-v3-price-row" id="priceFilters">${priceFiltersHtml()}</div>
+  </details>
+
+  <div class="public-v3-gifts" id="wishStream">${publicWishCards()}</div>
+ </section>
+
+ <section class="wrap public-v3-how">
+  <div class="public-v3-how-title"><span class="public-v3-eyebrow">COMO FUNCIONA</span><h2>Simples, direto e seguro.</h2></div>
+  <div class="public-v3-how-grid">
+   <div><span>1</span><i class="ti ti-gift"></i><b>Escolha</b><p>Abra o presente que combina com voce.</p></div>
+   <div><span>2</span><i class="ti ti-qrcode"></i><b>Presenteie</b><p>Pix vai direto ao casal. Presente fisico pode ser comprado em qualquer loja.</p></div>
+   <div><span>3</span><i class="ti ti-heart-check"></i><b>Pronto</b><p>O casal confirma o recebimento e o progresso da lista e atualizado.</p></div>
+  </div>
+ </section>
+
+ <footer class="public-v3-footer"><div class="wrap"><i class="ti ti-heart"></i> Feito com <b>Libri Presentes</b><span>O valor do Pix vai direto para o casal.</span></div></footer>
+ </div>`;
 }
 function libriStoryVisual(style,p,name){
  if(style==='journey')return `<div class="story-visual"><div class="journey-art"><div class="journey-line"></div><span class="journey-stop"><i class="ti ti-home-heart"></i></span><span class="journey-stop"><i class="ti ti-heart"></i></span><span class="journey-stop"><i class="ti ti-plane"></i></span><span class="journey-heart"><i class="ti ti-route-heart"></i></span></div><div class="visual-label">NOSSA JORNADA \u00b7 ${p}% REALIZADO</div></div>`;
@@ -135,7 +190,25 @@ function filteredWishes(){return publicState.gifts.filter(g=>{if(publicState.cat
 function publicWishCards(){const arr=filteredWishes();return arr.length?arr.map(publicWishCard).join(''):`<div class="empty">Nenhum desejo nessa sele\u00e7\u00e3o. Tente outra faixa ou categoria.</div>`}
 function publicWishCard(g){
  const pixDone=Number(g.target_cents)>0&&Number(g.confirmed_cents)>=Number(g.target_cents),physicalDone=g.gift_type==='physical'&&Number(g.received_reservations||0)>=Number(g.quantity||1),reserved=g.gift_type==='physical'&&Number(g.active_reservations||0)>=Number(g.quantity||1),done=pixDone||physicalDone,extra=publicState.event.completed_behavior==='allow_extra',locked=(done&&!extra)||(reserved&&!done),p=percent(g.confirmed_cents,g.target_cents);
- return `<article class="wish"><div class="wish-media">${g.image_url?`<img src="${attr(g.image_url)}" alt="">`:`<i class="ti ti-${attr(g.icon_name||'gift')}"></i>`}<span class="wish-type">${esc(typeLabel(g.gift_type))}</span></div><div class="wish-content"><div class="kicker">${esc(g.category||'Um desejo')}</div><h3>${esc(g.title)}</h3>${g.description?`<p>${esc(g.description)}</p>`:''}${g.preferred_color?`<span class="pref">Prefer\u00eancia: ${esc(g.preferred_color)}</span>`:''}<div class="wish-value"><span>Valor de refer\u00eancia</span><strong>${money(g.target_cents)}</strong></div>${g.gift_type!=='physical'?`<div class="progress"><span style="width:${p}%"></span></div><div class="wish-stats"><span>${money(g.confirmed_cents)} confirmados</span><span>${Number(g.contributor_count||0)} participa${Number(g.contributor_count||0)===1?'\u00e7\u00e3o':'\u00e7\u00f5es'}</span></div>`:`<div class="wish-stats"><span>${done?'Recebido \u2713':reserved?'Reservado por um convidado':'Dispon\u00edvel'}</span><span>Compra livre</span></div>`}<button class="btn ${locked?'secondary':''}" ${locked?'disabled':''} onclick="libriOpenWish(${js(g.id)})">${done?'Desejo realizado \u2713':reserved?'Reservado':'Quero presentear'}</button></div></article>`;
+ const status=done?'Realizado':reserved?'Reservado':'Disponivel';
+ return `<article class="public-v3-gift ${locked?'is-locked':''}">
+  <div class="public-v3-gift-media">
+   ${g.image_url?`<img src="${attr(g.image_url)}" alt="">`:`<div class="public-v3-gift-icon"><i class="ti ti-${attr(g.icon_name||'gift')}"></i></div>`}
+   <span class="public-v3-kind">${esc(typeLabel(g.gift_type))}</span>
+  </div>
+  <div class="public-v3-gift-body">
+   <div class="public-v3-gift-meta"><span>${esc(g.category||'Presente')}</span><span class="${done?'done':reserved?'reserved':''}">${status}</span></div>
+   <h3>${esc(g.title)}</h3>
+   ${g.description?`<p class="public-v3-gift-desc">${esc(g.description)}</p>`:''}
+   ${g.preferred_color?`<div class="public-v3-pref"><i class="ti ti-palette"></i> Preferencia: ${esc(g.preferred_color)}</div>`:''}
+   <div class="public-v3-gift-value"><small>Valor de referencia</small><strong>${money(g.target_cents)}</strong></div>
+   ${g.gift_type!=='physical'?`<div class="public-v3-mini-progress"><span style="width:${p}%"></span></div><div class="public-v3-mini-copy"><span>${p}% realizado</span><span>${Number(g.contributor_count||0)} participa${Number(g.contributor_count||0)===1?'cao':'coes'}</span></div>`:`<div class="public-v3-mini-copy"><span>${done?'Recebido pelo casal':reserved?'Reserva em andamento':'Compra livre'}</span><span>${g.quantity>1?`${Number(g.quantity)} unidades`:'1 unidade'}</span></div>`}
+   <button class="public-v3-gift-button" ${locked?'disabled':''} onclick="libriOpenWish(${js(g.id)})">
+    <span>${done?'Desejo realizado':reserved?'Reservado':'Quero presentear'}</span>
+    <i class="ti ti-arrow-up-right"></i>
+   </button>
+  </div>
+ </article>`;
 }
 function libriOpenWish(id){
  const g=publicState.gifts.find(x=>x.id===id);if(!g)return;
