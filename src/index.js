@@ -293,7 +293,7 @@ async function adminListEvents(env) {
   `).all();
   const events=(rows.results||[]).map(e=>{
     const readiness=readinessFromCount(e,Number(e.valid_gift_count||0));
-    return {...e,client_token_hash:undefined,preview_token:undefined,preview_url:e.preview_path?mediaUrl(env,e.preview_path):null,display_status:displayState(e,readiness),readiness};
+    return {...e,client_token_hash:undefined,client_access_token:undefined,preview_token:undefined,client_url:e.client_access_token?`${env.APP_URL}/c/${encodeURIComponent(e.client_access_token)}`:null,private_preview_url:e.preview_token?`${env.APP_URL}/preview/${encodeURIComponent(e.slug)}/${encodeURIComponent(e.preview_token)}`:null,public_url:`${env.APP_URL}/e/${encodeURIComponent(e.slug)}`,preview_url:e.preview_path?mediaUrl(env,e.preview_path):null,display_status:displayState(e,readiness),readiness};
   });
   return json({ok:true,events});
 }
@@ -308,13 +308,13 @@ async function adminCreateEvent(request, env) {
   await env.DB.prepare(`
     INSERT INTO events(id,slug,event_name,client_name,event_type,event_date,status,public_title,intro,
       experience_style,primary_color,secondary_color,accent_color,background_color,text_color,
-      client_token_hash,client_access_created_at,completed_behavior,reservation_hours,preview_token,onboarding_completed)
-    VALUES(?,?,?,?,?,?,'draft',?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,'show',48,?,0)
+      client_token_hash,client_access_token,client_access_created_at,completed_behavior,reservation_hours,preview_token,onboarding_completed)
+    VALUES(?,?,?,?,?,?,'draft',?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,'show',48,?,0)
   `).bind(
     id,slug,eventName,clean(body.client_name,120)||null,eventType,clean(body.event_date,20)||null,
     clean(body.public_title,160)||"Nossa lista de desejos",
     clean(body.intro,800)||"Reunimos alguns desejos para essa nova fase. Escolha um deles e participe do seu jeito.",
-    style,color(body.primary_color,"#6F6258"),color(body.secondary_color,"#D8CEC4"),color(body.accent_color,"#A8AD96"),color(body.background_color,"#F7F3EE"),color(body.text_color,"#2A2724"),tokenHash,previewToken
+    style,color(body.primary_color,"#6F6258"),color(body.secondary_color,"#D8CEC4"),color(body.accent_color,"#A8AD96"),color(body.background_color,"#F7F3EE"),color(body.text_color,"#2A2724"),tokenHash,clientToken,previewToken
   ).run();
   await log(env,id,"admin","event_created",{detail:eventName});
   return json({ok:true,event_id:id,slug,display_status:"configuring",client_url:`${env.APP_URL}/c/${encodeURIComponent(clientToken)}`,preview_url:`${env.APP_URL}/preview/${encodeURIComponent(slug)}/${encodeURIComponent(previewToken)}`,public_url:`${env.APP_URL}/e/${encodeURIComponent(slug)}`},201);
@@ -325,7 +325,7 @@ async function adminGetEvent(env,id) {
   if(!event)return json({ok:false,error:"not_found"},404);
   event=await ensurePreviewToken(env,event);
   const readiness=await eventReadiness(env,event);
-  return json({ok:true,event:{...event,client_token_hash:undefined,preview_url:event.preview_path?mediaUrl(env,event.preview_path):null,public_url:`${env.APP_URL}/e/${event.slug}`,private_preview_url:`${env.APP_URL}/preview/${event.slug}/${event.preview_token}`,display_status:displayState(event,readiness),readiness}});
+  return json({ok:true,event:{...event,client_token_hash:undefined,client_access_token:undefined,client_url:event.client_access_token?`${env.APP_URL}/c/${encodeURIComponent(event.client_access_token)}`:null,preview_url:event.preview_path?mediaUrl(env,event.preview_path):null,public_url:`${env.APP_URL}/e/${encodeURIComponent(event.slug)}`,private_preview_url:`${env.APP_URL}/preview/${encodeURIComponent(event.slug)}/${encodeURIComponent(event.preview_token)}`,display_status:displayState(event,readiness),readiness}});
 }
 
 async function adminUpdateEvent(request, env, id) {
@@ -355,7 +355,7 @@ async function adminRegenerateAccess(env,id) {
   if (!event) return json({ok:false,error:"not_found"},404);
   const rawToken = randomToken();
   const hash = await sha256(rawToken);
-  await env.DB.prepare(`UPDATE events SET client_token_hash=?,client_access_created_at=CURRENT_TIMESTAMP WHERE id=?`).bind(hash,id).run();
+  await env.DB.prepare(`UPDATE events SET client_token_hash=?,client_access_token=?,client_access_created_at=CURRENT_TIMESTAMP WHERE id=?`).bind(hash,rawToken,id).run();
   return json({ok:true,client_url:`${env.APP_URL}/c/${encodeURIComponent(rawToken)}`});
 }
 
@@ -380,7 +380,7 @@ async function clientDashboard(env,event) {
   const reservR=await env.DB.prepare(`SELECT r.*,g.title gift_title,g.icon_name,g.preferred_color FROM reservations r JOIN gifts g ON g.id=r.gift_id WHERE r.event_id=? ORDER BY r.created_at DESC`).bind(event.id).all();
   const gifts=(giftsR.results||[]).map(g=>({...g,image_url:g.image_path?mediaUrl(env,g.image_path):null}));
   const readiness=readinessFromCount(event,gifts.filter(g=>g.is_active&&Number(g.target_cents)>=100).length);
-  return json({ok:true,event:{...event,client_token_hash:undefined,preview_token:undefined,preview_url:event.preview_path?mediaUrl(env,event.preview_path):null,public_url:`${env.APP_URL}/e/${event.slug}`,private_preview_url:`${env.APP_URL}/preview/${event.slug}/${event.preview_token}`,display_status:displayState(event,readiness),readiness},gifts,contributions:contribR.results||[],reservations:reservR.results||[]});
+  return json({ok:true,event:{...event,client_token_hash:undefined,client_access_token:undefined,preview_token:undefined,preview_url:event.preview_path?mediaUrl(env,event.preview_path):null,public_url:`${env.APP_URL}/e/${event.slug}`,private_preview_url:`${env.APP_URL}/preview/${event.slug}/${event.preview_token}`,display_status:displayState(event,readiness),readiness},gifts,contributions:contribR.results||[],reservations:reservR.results||[]});
 }
 
 async function clientUpdateEvent(request,env,event) {
