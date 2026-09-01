@@ -1,11 +1,9 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-
   "name": "libri-presentes",
   "main": "./src/index.js",
   "compatibility_date": "2026-09-01",
   "workers_dev": true,
-
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
@@ -13,10 +11,13 @@
     "run_worker_first": [
       "/api/*",
       "/media/*",
-      "/e/*"
+      "/e/*",
+      "/preview/*",
+      "/admin*",
+      "/c/*",
+      "/r/*"
     ]
   },
-
   "d1_databases": [
     {
       "binding": "DB",
@@ -25,14 +26,12 @@
       "migrations_dir": "./migrations"
     }
   ],
-
   "r2_buckets": [
     {
       "binding": "MEDIA",
       "bucket_name": "libri-presentes"
     }
   ],
-
   "vars": {
     "APP_NAME": "Libri Presentes",
     "APP_URL": "https://presentes.libriconvites.com.br",
@@ -40,8 +39,5 @@
     "MAX_UPLOAD_BYTES": "307200",
     "RESERVATION_HOURS": "48"
   },
-
-  "observability": {
-    "enabled": true
-  }
+  "observability": { "enabled": true }
 }
