@@ -67,6 +67,7 @@ async function boot(){
  if(path==='/')return libriLanding();
  if(path==='/admin')return libriAdminPage();
  let m=path.match(/^\/c\/([^/]+)$/);if(m)return libriClientPage(decodeURIComponent(m[1]));
+ m=path.match(/^\/p\/([^/]+)$/);if(m){const slug=decodeURIComponent(m[1]);history.replaceState(null,'',`/e/${encodeURIComponent(slug)}${location.search}${location.hash}`);return libriPublicPage(slug,null)}
  m=path.match(/^\/e\/([^/]+)$/);if(m)return libriPublicPage(decodeURIComponent(m[1]),null);
  m=path.match(/^\/preview\/([^/]+)\/([^/]+)$/);if(m)return libriPublicPage(decodeURIComponent(m[1]),decodeURIComponent(m[2]));
  m=path.match(/^\/r\/([^/]+)$/);if(m)return libriReservationPage(decodeURIComponent(m[1]));
