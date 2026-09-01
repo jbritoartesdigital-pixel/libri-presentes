@@ -1,0 +1,15 @@
+{
+  "name": "libri-presentes",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Libri Presentes - experiência de presentes para casamentos e celebrações.",
+  "scripts": {
+    "dev": "wrangler dev --config wrangler.jsonc",
+    "deploy": "wrangler deploy --config wrangler.jsonc",
+    "migrate:local": "wrangler d1 migrations apply libri-presentes-db --local --config wrangler.jsonc",
+    "migrate:remote": "wrangler d1 migrations apply libri-presentes-db --remote --config wrangler.jsonc"
+  },
+  "devDependencies": {
+    "wrangler": "4.125.0"
+  }
+}
